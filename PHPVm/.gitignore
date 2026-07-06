@@ -1,0 +1,11 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+*.log
+*.tmp
+*.bak
+.pvm/
+test-results/
