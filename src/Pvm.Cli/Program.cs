@@ -61,6 +61,10 @@ public static class Program
                 .WithAlias("update")
                 .WithDescription("Check for updates and self-update PVM in place.");
 
+            config.AddCommand<SelfUninstallCommand>("self-uninstall")
+                .WithAlias("uninstall-self")
+                .WithDescription("Completely uninstall PVM and remove all downloaded binaries and PATH entries");
+
             config.AddCommand<CompletionCommand>("completion")
                 .WithDescription("Generate shell argument completion scripts (powershell, cmd, bash).");
         });

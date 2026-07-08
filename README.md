@@ -230,6 +230,19 @@ pvm self-update --check
 pvm self-update
 ```
 
+### 6. Complete Uninstallation (`pvm self-uninstall`)
+To completely remove PVM, all installed PHP versions, junctions, and `PATH` entries from your device at any time:
+```powershell
+# Run the built-in self-uninstaller command
+pvm self-uninstall -y
+
+# OR run the standalone one-line uninstaller script via PowerShell:
+irm https://raw.githubusercontent.com/hasanhawary/phpvm/main/uninstall.ps1 | iex
+
+# OR on macOS/Linux via Bash:
+curl -o- https://raw.githubusercontent.com/hasanhawary/phpvm/main/uninstall.sh | bash
+```
+
 ---
 
 ## 📖 Complete Command Reference (`pvm --help`)
@@ -246,6 +259,7 @@ pvm self-update
 | **`alias`** | | `pvm alias [name] [target] [--remove]` | Create, list, or delete (`--remove`) semantic version aliases. |
 | **`doctor`** | | `pvm doctor [--fix]` | Run system health audits. Pass `--fix` to automatically remediate issues. |
 | **`self-update`**| `update` | `pvm self-update [--check]` | Check for updates (`--check`) or self-update `pvm.exe` directly from GitHub Releases. |
+| **`self-uninstall`**| `uninstall-self` | `pvm self-uninstall [-y]` | Completely uninstall PVM, all PHP binaries, directory junctions, and registry `PATH` entries. |
 | **`completion`** | | `pvm completion <powershell\|cmd\|bash>` | Output shell parameter argument completion scripts. |
 
 ---

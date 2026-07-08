@@ -230,11 +230,7 @@ public static class InstallerEngine
             ReportProgress(progressCallback, 35, "Ensuring PVM directory structure exists...");
             Directory.CreateDirectory(installBinPath);
             Directory.CreateDirectory(pvmVersions);
-            Directory.CreateDirectory(pvmArchives);
-            if (!Directory.Exists(pvmCurrent))
-            {
-                Directory.CreateDirectory(pvmCurrent);
-            }
+            Directory.CreateDirectory(Path.Combine(pvmRoot, "archives"));
 
             // Step 4: Atomically Prepare Target Exe & Copy/Download with 10x Retries
             ReportProgress(progressCallback, 50, "Locating or downloading pvm.exe core engine...");

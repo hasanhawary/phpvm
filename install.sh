@@ -20,7 +20,6 @@ echo "[1/4] Detected Operating System: $OS_TYPE"
 
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$HOME/.pvm/versions"
-mkdir -p "$HOME/.pvm/current"
 
 case "$OS_TYPE" in
     MINGW*|MSYS*|CYGWIN*|Windows_NT)

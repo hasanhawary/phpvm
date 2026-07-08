@@ -91,9 +91,13 @@ public sealed class WindowsJunctionManager : IJunctionManager
             {
                 Directory.Delete(fullPath, false);
             }
-            else
+            else if (Directory.Exists(fullPath))
             {
-                return Result.Fail($"Path exists but is not an NTFS junction or symlink: {fullPath}");
+                Directory.Delete(fullPath, true);
+            }
+            else if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
             }
 
             return Result.Ok();
