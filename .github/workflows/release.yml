@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 8 SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Run Full Test Suite
+      run: dotnet test pvm.sln -c Release
+
+    - name: Publish Standalone Self-Contained Executable
+      run: dotnet publish src/Pvm.Cli/Pvm.Cli.csproj -c Release -r win-x64 -o ./publish
+
+    - name: Package Release Archive
+      run: |
+        Compress-Archive -Path ./publish/pvm.exe, ./README.md, ./LICENSE -DestinationPath ./pvm-win-x64.zip
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ./pvm-win-x64.zip
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

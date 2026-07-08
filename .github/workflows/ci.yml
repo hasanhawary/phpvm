@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 8 SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore Dependencies
+      run: dotnet restore pvm.sln
+
+    - name: Build Solution (Release)
+      run: dotnet build pvm.sln -c Release --no-restore
+
+    - name: Run Unit Tests & Architecture Enforcement
+      run: dotnet test pvm.sln -c Release --no-build --verbosity normal
+
+    - name: Publish Standalone Self-Contained Executable
+      run: dotnet publish src/Pvm.Cli/Pvm.Cli.csproj -c Release -r win-x64 --no-build -o ./dist
+
+    - name: Verify Executable Execution
+      run: |
+        ./dist/pvm.exe --help
+        ./dist/pvm.exe doctor
+
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: pvm-win-x64
+        path: ./dist/pvm.exe
