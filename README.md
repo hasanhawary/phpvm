@@ -1,15 +1,19 @@
-# pvm — PHP Version Manager for Windows
+# PVM — Universal PHP Version Manager for Windows, macOS & Linux
 
 <div align="center">
 
 ![.NET 8.0](https://img.shields.io/badge/.NET-8.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)
-![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078D4?style=for-the-badge&logo=windows&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D4?style=for-the-badge&logo=windows&logoColor=white)
+![Architecture](https://img.shields.io/badge/Architecture-x64%20%7C%20arm64%20(Apple%20Silicon)-00C7B7?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
-![Architecture](https://img.shields.io/badge/Architecture-Clean%20%7C%20SOLID-blueviolet?style=for-the-badge)
-![AOT Compatible](https://img.shields.io/badge/Standalone-Self--Contained-00C7B7?style=for-the-badge)
+![Self-Contained](https://img.shields.io/badge/Binary-Zero%20Dependencies-blueviolet?style=for-the-badge)
 
-**The production-grade, fast, and zero-friction PHP version manager for Windows.**  
-*Inspired by `nvm-windows`, `pyenv`, `sdkman`, and `asdf` — engineered specifically for the Windows developer ecosystem.*
+**The production-grade, lightning-fast, and cross-platform PHP version manager.**  
+*Engineered from the ground up with clean architecture (`SOLID`) as a standalone native executable (~34 MB) requiring zero runtime dependencies.*
+
+---
+
+[**Download Windows EXE (`pvm-setup.exe`)**](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-setup.exe) • [**macOS / Linux Installation**](#method-2-one-line-macos--linux-installer-curl--wget--recommended-for-macos--linux) • [**Quick Start**](#⚡-quick-start-step-by-step-guide) • [**Command Reference**](#📖-complete-command-reference-pvm---help)
 
 </div>
 
@@ -17,56 +21,66 @@
 
 ## 💡 Why PVM?
 
-On Windows, managing multiple PHP versions across different projects traditionally requires tedious manual editing of System Environment Variables (`PATH`), dealing with complex directory structures, restarting terminal tabs, or installing bulky, monolithic server packages (like WAMP, XAMPP, or Laragon) that lock your system into inflexible setups.
+Managing multiple PHP versions across projects on Windows, macOS, or Linux traditionally requires tedious manual editing of Environment Variables (`$PATH`), wrestling with system permissions (`sudo`), restarting terminal sessions, or installing heavy, monolithic local servers (like WAMP, XAMPP, Laragon, or MAMP) that lock your development environment into rigid configurations.
 
-**PVM (`pvm`) solves this completely with zero friction:**
-- ⚡ **Instant NTFS Directory Junctions (`mklink /J`)**: Instead of constantly editing, polluting, or reordering your Windows `PATH`, PVM registers a single, permanent directory junction (`%USERPROFILE%\.pvm\current`). When you run `pvm use <version>`, PVM atomically updates the junction point—making version switching **instantaneous** across all open terminal sessions.
-- 🔓 **No Administrator Privileges Required**: Runs entirely in user space (`%USERPROFILE%\.pvm` and `%LOCALAPPDATA%\pvm`), keeping your system clean and secure without requiring `Right-Click -> Run as Administrator`.
-- 🔄 **Native Windows Shell Awareness**: Broadcasts native Windows `WM_SETTINGCHANGE` environment notifications across the operating system (`HWND_BROADCAST`), ensuring new terminal windows recognize environment changes immediately.
-- 🛠️ **Interactive `php.ini` & Alias Manager**: Toggle PHP extensions (`pvm ini enable curl`), inspect configuration values (`pvm ini get memory_limit`), update directives (`pvm ini set memory_limit 1024M`), and create semantic version shortcuts (`pvm alias default 8.4`) directly from your command line.
-- 🩺 **Automated Doctor & Remediation**: Built-in system diagnostic tool (`pvm doctor --fix`) that detects and repairs PATH duplicates, resolves external PHP shadowing conflicts, and verifies required C++ redistributable runtime libraries (`vcruntime140.dll`).
-- 🚀 **Self-Contained & Zero Dependencies**: Compiled as a trimmed, self-contained native executable (`pvm.exe`, ~34 MB). End users do **not** need .NET SDKs or runtimes installed on their machines.
+**PVM (`pvm`) solves this completely across all operating systems with zero friction:**
 
----
-
-## 📦 Installation Guide (6 Comprehensive Methods)
-
-PVM is engineered for universal compatibility across PowerShell, Command Prompt, Git Bash, and Package Managers. Choose the installation method that best fits your workflow:
+- 🚀 **Universal Cross-Platform Native Binaries**: Whether you are on **Windows 10/11 (x64)**, **macOS (Intel & Apple Silicon M1/M2/M3)**, or **Linux (Ubuntu, Debian, Alpine x64/arm64)**, PVM installs as a single, ultra-fast standalone native executable (`pvm.exe` on Windows, `pvm` on POSIX).
+- ⚡ **Instant Atomic Version Switching**: 
+  - **On Windows**: Uses high-performance **NTFS Directory Junctions (`mklink /J`)** combined with native `WM_SETTINGCHANGE` OS broadcasts (`HWND_BROADCAST`).
+  - **On macOS & Linux**: Uses atomic **POSIX Symbolic Links (`ln -sfn`)**.
+  When you run `pvm use <version>`, your entire system switches instantly without moving multi-gigabyte files or restarting computers.
+- 🔓 **100% User-Space — Zero Administrator / `sudo` Rights Needed**: PVM installs cleanly inside your user home directory (`~/.pvm`). Our automatic shell login profile injection (`~/.bashrc`, `~/.zshrc`, `Profile.ps1`) ensures PVM always takes priority over any pre-existing global PHP installation **without requiring Administrator or root access**.
+- 🛠️ **Built-in `php.ini` & Extension Manager**: Toggle extensions (`pvm ini enable curl`), inspect configuration directives (`pvm ini get memory_limit`), update limits (`pvm ini set memory_limit 1024M`), or open your active `php.ini` file in your favorite editor straight from the CLI.
+- 🩺 **Self-Healing Doctor & PATH Hygiene**: Built-in system diagnostic engine (`pvm doctor --fix`) that detects duplicate PATH entries, cleans up external PHP shadowing conflicts, and verifies native C++ runtime requirements (`vcruntime140.dll`).
+- 🔄 **In-Place Self-Updating & Uninstallation**: Upgrade your PVM binary (`pvm self-update`) or perform a complete, clean uninstallation (`pvm self-uninstall -y`) right from the command line anytime.
 
 ---
 
-### Method 1: One-Line PowerShell Script (`install.ps1`) — Recommended for Windows
-Just like `rustup`, `bun`, or `nvm`, you can install PVM directly inside PowerShell without manual downloading. Open PowerShell and run:
+## 🌐 Cross-Platform Compatibility Matrix
 
-```powershell
-irm https://raw.githubusercontent.com/hasanhawary/phpvm/main/install.ps1 | iex
-```
-*Automatically downloads the latest `pvm.exe`, installs to `%USERPROFILE%\.pvm\bin\pvm.exe`, registers in your User `PATH`, and broadcasts environment updates across Windows.*
+| Operating System | Supported Architectures | Binary Name | Link Mechanism | Shell Profile Automation |
+| :--- | :--- | :--- | :--- | :--- |
+| **Windows 10 / 11** | `win-x64` | `pvm.exe` (`~34 MB`) | NTFS Directory Junction (`mklink /J`) | PowerShell `$PROFILE` + Windows Registry User `PATH` + `WM_SETTINGCHANGE` |
+| **macOS (Darwin)** | `osx-x64`, `osx-arm64` *(Apple Silicon M1/M2/M3)* | `pvm` (`~32 MB`) | POSIX Symbolic Link (`ln -sfn`) | `~/.bashrc`, `~/.zshrc`, `~/.bash_profile` |
+| **Linux (Debian/Ubuntu/RHEL)** | `linux-x64`, `linux-arm64` | `pvm` (`~32 MB`) | POSIX Symbolic Link (`ln -sfn`) | `~/.bashrc`, `~/.zshrc`, `~/.profile` |
 
 ---
 
-### Method 2: One-Line Bash Script (`install.sh`) — For Git Bash / MSYS / macOS / Linux
-If you work inside **Git Bash**, **Cygwin**, **macOS (`Darwin`)**, or **Linux**, run our universal POSIX shell installer using `curl` or `wget` (just like `nvm-sh`):
+## 📦 Installation Guide (All Platforms)
 
-**Via cURL:**
+### Method 1: Standalone Windows Setup Wizard (`pvm-setup.exe`) — Recommended for Windows Desktop
+If you prefer a classic, visual desktop installation wizard (`like nvm-setup.exe` or `git-setup.exe`):
+
+1. **[Click Here to Download `pvm-setup.exe` Directly](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-setup.exe)** *(or check out the [GitHub Releases Page](https://github.com/hasanhawary/phpvm/releases))*.
+2. Double-click `pvm-setup.exe` (or run `pvm-setup.exe /S` from terminal for unattended silent installation).
+3. The visual setup wizard checks if `pvm.exe` is running, lets you customize your installation directory, extracts the native binary atomically, registers your User `PATH`, and configures your PowerShell profiles automatically!
+
+---
+
+### Method 2: One-Line macOS & Linux Installer (`curl / wget`) — Recommended for macOS & Linux
+For developers on **macOS (Intel & Apple Silicon)**, **Ubuntu**, **Debian**, **Cygwin**, or **Git Bash**, install PVM in seconds using our universal POSIX installer:
+
+**Via cURL (macOS / Linux / Git Bash):**
 ```bash
 curl -o- https://raw.githubusercontent.com/hasanhawary/phpvm/main/install.sh | bash
 ```
 
-**Or via Wget:**
+**Or via Wget (Linux / Bash):**
 ```bash
 wget -qO- https://raw.githubusercontent.com/hasanhawary/phpvm/main/install.sh | bash
 ```
-*On Windows Git Bash, this automatically extracts the native Windows x64 binary to `$HOME/.pvm/bin/pvm.exe` and configures your `~/.bashrc` / `~/.zshrc` automatically!*
+*Automatically detects your OS and CPU architecture (`x64` vs `arm64`), downloads the corresponding native binary to `$HOME/.pvm/bin/pvm`, and configures `~/.bashrc` / `~/.zshrc` so PVM works immediately across terminal sessions!*
 
 ---
 
-### Method 3: Standalone Windows GUI Setup Wizard (`pvm-setup.exe`) — Direct Download
-If you prefer a classic, visual desktop setup window (`like nvm-setup.exe`):
+### Method 3: One-Line Windows PowerShell Script (`install.ps1`)
+If you work inside PowerShell and prefer terminal automation without GUI wizards (`like rustup` or `bun`):
 
-1. **[Click Here to Download `pvm-setup.exe` Directly](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-setup.exe)** *(or view all releases on the [Releases Page](https://github.com/hasanhawary/phpvm/releases))*.
-2. Double-click `pvm-setup.exe` (or run `pvm-setup.exe /S` from terminal for silent unattended installation).
-   - *A visual Windows dialog wizard opens on your desktop, lets you customize your path, checks for running PVM processes, performs a transactional copy with rollback capability, registers your `PATH` globally, and completes installation in seconds without requiring source code.*
+```powershell
+irm https://raw.githubusercontent.com/hasanhawary/phpvm/main/install.ps1 | iex
+```
+*Downloads `pvm.exe` to `$HOME\.pvm\bin\pvm.exe`, configures `$PROFILE` for non-admin session prioritization, registers User `PATH`, and broadcasts environment updates right across Windows.*
 
 ---
 
@@ -91,20 +105,22 @@ brew install pvm
 
 ---
 
-### Method 5: Pre-built Binary Zip Archive (`pvm-win-x64.zip`) — Direct Download
-If you prefer manual extraction without an installer:
+### Method 5: Pre-built Binary Archives (`.zip` / `.tar.gz`) — Manual Installation
+If you want to place `pvm` anywhere without running installation scripts:
 
-1. **[Click Here to Download `pvm-win-x64.zip` Directly](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-win-x64.zip)**.
-2. Extract `pvm.exe` into `%USERPROFILE%\.pvm\bin\pvm.exe`.
-3. Add `%USERPROFILE%\.pvm\bin` to your Windows User `PATH`:
-   ```powershell
-   $pvmBin = "$env:USERPROFILE\.pvm\bin"; [Environment]::SetEnvironmentVariable("PATH", "$pvmBin;" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")
-   ```
+1. Download your native binary package from **[GitHub Releases](https://github.com/hasanhawary/phpvm/releases/latest)**:
+   - Windows (x64): [`pvm-win-x64.zip`](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-win-x64.zip)
+   - macOS (Intel x64): [`pvm-osx-x64.tar.gz`](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-osx-x64.tar.gz)
+   - macOS (Apple Silicon ARM64): [`pvm-osx-arm64.tar.gz`](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-osx-arm64.tar.gz)
+   - Linux (x64): [`pvm-linux-x64.tar.gz`](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-linux-x64.tar.gz)
+   - Linux (ARM64): [`pvm-linux-arm64.tar.gz`](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-linux-arm64.tar.gz)
+2. Extract the binary into `~/.pvm/bin/pvm` (`~/.pvm/bin/pvm.exe` on Windows).
+3. Add `~/.pvm/current` and `~/.pvm/bin` to your system `$PATH` (`export PATH="$HOME/.pvm/current:$HOME/.pvm/bin:$PATH"`).
 
 ---
 
-### Method 6: Manual Developer Build from Source (`git clone`)
-To build PVM directly from source using the .NET 8 SDK:
+### Method 6: Build Directly from Source (`git clone`)
+To compile PVM from source using the .NET 8 SDK across any platform:
 
 ```powershell
 git clone https://github.com/hasanhawary/phpvm.git
@@ -117,129 +133,147 @@ cd phpvm
 
 ## ⚡ Quick Start Step-by-Step Guide
 
-Once installed, follow these 5 simple steps to get your Windows PHP environment running cleanly:
+Once installed, follow these 5 quick steps to master your PHP environment across any OS:
 
-### Step 1: Discover Available Remote PHP Versions
-Fetch and display all available PHP builds from the official `windows.php.net` mirrors:
+### Step 1: Discover Available PHP Versions
+Fetch and display all available PHP builds from official mirrors:
 ```powershell
 pvm list --remote
 ```
 
 ### Step 2: Download & Install a PHP Version
-Install any desired version (PVM automatically downloads the Thread Safe x64 binary by default, validates SHA256 cryptographic checksums, and extracts the clean binaries):
+Download and install any desired version (`PVM automatically verifies SHA256 cryptographic checksums and configures native Thread Safe/Non-Thread Safe architectures`):
 ```powershell
-pvm install 8.3
+pvm install 8.4
 ```
 
 ### Step 3: Switch Active System PHP Version
-Activate PHP 8.3 across your Windows machine. PVM updates the `%USERPROFILE%\.pvm\current` NTFS junction point:
+Switch your active PHP version instantaneously across your device:
 ```powershell
-pvm use 8.3
+pvm use 8.4
 ```
 
 ### Step 4: Verify Your Active PHP Environment
-Check both PVM runtime status and the native `php -v` binary output:
+Verify both PVM status and the native `php -v` output:
 ```powershell
 pvm current
 php -v
 ```
 
-### Step 5: Run Automated Health Diagnostics
-Ensure your `PATH` is clean and free of conflicts or missing C++ runtime libraries:
+### Step 5: Run Automated Health & Doctor Diagnostics
+Inspect your environment for PATH duplicates, missing C++ redistributables, or conflicting external tools:
 ```powershell
-pvm doctor
+pvm doctor --fix
 ```
 
 ---
 
-## 🌟 Comprehensive Feature Guide
+## 🛠️ Advanced Feature Showcase
 
-### 1. Semantic Version Aliasing (`pvm alias`)
-Create memorable shortcuts for specific versions so you don't have to remember patch numbers:
+### 1. Interactive `php.ini` & Extension Manager (`pvm ini`)
+You never need to hunt down or manually edit text files inside deep system directories again. PVM parses, edits, and manages your active `php.ini` directly from the command line:
+
 ```powershell
-# Create semantic aliases
-pvm alias default 8.4
-pvm alias lts 8.2
-pvm alias legacy 7.4
-
-# Switch or install using your custom aliases directly!
-pvm use default
-pvm install lts
-
-# View all saved aliases
-pvm alias
-```
-
-### 2. Smart `php.ini` Extension & Directive Editor (`pvm ini`)
-Inspect, toggle, and configure your active `php.ini` file without leaving your terminal or losing your formatting/comments:
-```powershell
-# Display a formatted status table of all PHP extensions in the active php.ini
+# List all PHP extensions and see which ones are Enabled vs Disabled
 pvm ini ls
 
-# Enable or disable standard and Zend extensions instantly
+# Enable or disable an extension instantly across your active PHP runtime
 pvm ini enable curl
 pvm ini enable mbstring
-pvm ini enable openssl
 pvm ini disable xdebug
 
-# Inspect and update configuration directives
+# Inspect any configuration directive value
 pvm ini get memory_limit
+
+# Update a configuration directive cleanly
 pvm ini set memory_limit 1024M
 pvm ini set upload_max_filesize 64M
 
-# Open php.ini in your system default text editor (Notepad, VS Code, etc.)
+# Open the active php.ini directly in your default system text editor
 pvm ini open
 ```
 
-### 3. Automated System Health & Self-Healing (`pvm doctor`)
-PVM includes a diagnostic engine that continuously audits your Windows environment:
+---
+
+### 2. Semantic Version Aliases (`pvm alias`)
+Create memorable shortcuts for specific project requirements or workflow defaults:
+
 ```powershell
-# Run diagnostics table
+# Create an alias pointing 'default' or 'legacy' to a specific PHP build
+pvm alias default 8.4.23
+pvm alias legacy 7.4.33
+
+# Switch versions using your custom alias names!
+pvm use default
+pvm use legacy
+
+# List all configured aliases or remove outdated ones
+pvm alias
+pvm alias legacy --remove
+```
+
+---
+
+### 3. Automated Doctor & PATH Hygiene Diagnostics (`pvm doctor` & `pvm env`)
+If your terminal ever executes the wrong `php.exe` because an old tool (like XAMPP, Laragon, or `C:\Program Files\PHP`) is shadowing PVM, PVM fixes it automatically:
+
+```powershell
+# Run system diagnostic checks
 pvm doctor
 
-# Automatically repair missing folders, PATH duplicates, and junction registrations
+# Automatically repair PATH duplicates and resolve junction problems
 pvm doctor --fix
+
+# Inspect PATH hygiene and conflict status
+pvm env --check
+
+# Clean duplicate PATH entries while preserving order
+pvm env --clean
 ```
-**What PVM Doctor checks:**
-- `[PASS/FAIL]` **Directory Structure & Permissions**: Verifies `~/.pvm` folder integrity.
-- `[PASS/WARN]` **Junction PATH Registration**: Verifies that `~/.pvm/current` is active in `PATH`.
-- `[PASS/WARN]` **Windows PATH Hygiene**: Scans for redundant duplicate directory entries in your `PATH` that slow down command resolution.
-- `[PASS/WARN]` **External PHP Shadowing Conflicts**: Detects if another PHP tool (like XAMPP, WAMP, or `C:\Program Files\PHP`) is placed higher in your `PATH` than PVM.
-- `[PASS/FAIL]` **Visual C++ Redistributable Check**: Audits `System32` for `vcruntime140.dll` to prevent PHP 8.x missing DLL popup errors.
 
-### 4. Shell Autocompletion (`pvm completion`)
-Enable `<TAB>` autocompletion for PVM commands and installed version numbers across your shells:
+---
+
+### 4. Shell Argument Autocompletion (`pvm completion`)
+Generate native tab autocompletion scripts for your favorite shell:
+
 ```powershell
-# For PowerShell: Add this line to your PowerShell $PROFILE
-pvm completion powershell | Out-String | Invoke-Expression
+# PowerShell Tab Completion
+pvm completion powershell >> $PROFILE
 
-# For Windows Command Prompt (cmd via Clink):
-pvm completion cmd > %LOCALAPPDATA%\clink\pvm.lua
-
-# For Git Bash / WSL:
+# Bash Tab Completion (Linux / macOS / Git Bash)
 pvm completion bash >> ~/.bashrc
 ```
 
+---
+
 ### 5. In-Place Self-Updating (`pvm self-update`)
-Update `pvm.exe` itself to the latest release directly from GitHub without opening a browser:
+Upgrade `pvm` (`pvm.exe`) itself to the latest release directly from GitHub without opening a browser:
+
 ```powershell
-# Check if a new version is available
+# Check if a new release version is available on GitHub
 pvm self-update --check
 
-# Download and atomically replace pvm.exe with the latest version
+# Download and atomically replace your active pvm binary in place
 pvm self-update
 ```
 
+---
+
 ### 6. Complete Uninstallation (`pvm self-uninstall`)
-To completely remove PVM, all installed PHP versions, junctions, and `PATH` entries from your device at any time:
+If you ever want to completely remove PVM, all downloaded PHP binaries, directory junctions, and shell `PATH` entries from your device without leaving a single trace:
+
+#### Option A: Using the built-in PVM command (Any OS)
 ```powershell
-# Run the built-in self-uninstaller command
 pvm self-uninstall -y
+```
 
-# OR run the standalone one-line uninstaller script via PowerShell:
+#### Option B: One-Line PowerShell Uninstaller (`uninstall.ps1` for Windows)
+```powershell
 irm https://raw.githubusercontent.com/hasanhawary/phpvm/main/uninstall.ps1 | iex
+```
 
-# OR on macOS/Linux via Bash:
+#### Option C: One-Line Bash Uninstaller (`uninstall.sh` for macOS / Linux)
+```bash
 curl -o- https://raw.githubusercontent.com/hasanhawary/phpvm/main/uninstall.sh | bash
 ```
 
@@ -251,103 +285,62 @@ curl -o- https://raw.githubusercontent.com/hasanhawary/phpvm/main/uninstall.sh |
 | :--- | :--- | :--- | :--- |
 | **`list`** | `ls` | `pvm list [--remote]` | List installed local PHP versions or fetch available versions from official mirrors. |
 | **`current`** | | `pvm current` | Display the active PHP version, binary path, and runtime status. |
-| **`use`** | | `pvm use <version>` | Switch the active PHP version by atomically updating the NTFS directory junction. |
+| **`use`** | | `pvm use <version>` | Switch the active PHP version by atomically updating your system directory link. |
 | **`install`** | | `pvm install <version> [--force]` | Download, verify SHA256 checksum, and install a PHP version from official mirrors. |
 | **`uninstall`**| | `pvm uninstall <version>` | Remove an installed PHP version from your local disk (`~/.pvm/versions`). |
-| **`env`** | | `pvm env [--check\|--clean\|--ps1]` | Inspect `PATH` hygiene (`--check`), clean duplicates (`--clean`), or output session evaluation scripts (`--ps1`, `--cmd`). |
+| **`env`** | | `pvm env [--check\|--clean\|--ps1]` | Inspect `PATH` hygiene (`--check`), clean duplicates (`--clean`), or output evaluation scripts (`--ps1`, `--cmd`). |
 | **`ini`** | | `pvm ini <ls\|enable\|disable\|get\|set\|open>` | Inspect or modify the active `php.ini` file's extensions and configuration directives. |
 | **`alias`** | | `pvm alias [name] [target] [--remove]` | Create, list, or delete (`--remove`) semantic version aliases. |
 | **`doctor`** | | `pvm doctor [--fix]` | Run system health audits. Pass `--fix` to automatically remediate issues. |
-| **`self-update`**| `update` | `pvm self-update [--check]` | Check for updates (`--check`) or self-update `pvm.exe` directly from GitHub Releases. |
-| **`self-uninstall`**| `uninstall-self` | `pvm self-uninstall [-y]` | Completely uninstall PVM, all PHP binaries, directory junctions, and registry `PATH` entries. |
+| **`self-update`**| `update` | `pvm self-update [--check]` | Check for updates (`--check`) or self-update PVM directly from GitHub Releases. |
+| **`self-uninstall`**| `uninstall-self` | `pvm self-uninstall [-y]` | Completely uninstall PVM, all PHP binaries, directory junctions, and shell `PATH` entries. |
 | **`completion`** | | `pvm completion <powershell\|cmd\|bash>` | Output shell parameter argument completion scripts. |
 
 ---
 
 ## 📂 System Directory & File Structure
 
-PVM stores all files cleanly inside your user profile (`%USERPROFILE%` and `%LOCALAPPDATA%`), ensuring zero permission conflicts and no clutter across your C: drive:
+PVM stores all configuration and version binaries cleanly inside your user profile (`~/.pvm` or `%USERPROFILE%\.pvm`), ensuring zero permission conflicts across any OS:
 
 ```text
-%USERPROFILE%\.pvm\
-├── bin\                  <-- Contains pvm.exe (Registered globally in your User PATH)
-├── current\              <-- NTFS Directory Junction pointing to active installed PHP version
-├── versions\             <-- Installed PHP binaries (e.g., 8.2.18, 8.3.32, 8.4.23)
-├── archives\             <-- Cached zip archive downloads from windows.php.net
-└── temp\                 <-- Temporary extraction workspace
-
-%LOCALAPPDATA%\pvm\config\
-├── config.json           <-- PVM global configuration settings (default arch, TS/NTS preferences)
-└── aliases.json          <-- Saved semantic version aliases
+~/.pvm/
+├── bin/
+│   ├── pvm.exe          # Main compiled PVM CLI binary
+│   └── pvm-setup.exe    # Standalone GUI installer wizard
+├── current/             # Active directory link -> ~/.pvm/versions/<active_version>
+├── versions/            # Extracted PHP version directories
+│   ├── 8.2.15/
+│   ├── 8.3.3/
+│   └── 8.4.23/
+└── aliases.json         # Semantic version shortcuts storage
 ```
 
 ---
 
-## 🏗️ Clean Architecture & Engineering Standards
+## 🏗️ Clean Architecture & Development Specs
 
-PVM (`pvm`) is engineered using **.NET 8** following strict **Clean Architecture**, **SOLID**, and **Domain-Driven Design** guidelines to serve as a rock-solid, production-ready reference codebase:
+PVM is engineered using strict **Clean Architecture (Hexagonal / Ports & Adapters)** and **SOLID** domain-driven design principles:
 
 ```text
-+-----------------------------------------------------------------------------+
-|                                  Pvm.Cli                                    |
-|             (Spectre.Console Presentation Layer & Command Routing)          |
-+-------------------------------------+---------------------------------------+
-                                      |
-                                      v
-+-----------------------------------------------------------------------------+
-|                              Pvm.Application                                |
-|          (Use Case Orchestrators, Version Resolution, Doctor Service)       |
-+-------------------------------------+---------------------------------------+
-                                      |
-                                      v
-+-----------------------------------------------------------------------------+
-|                                 Pvm.Core                                    |
-|          (Pure Domain Models, Value Objects, Enums, Ports / Interfaces)     |
-+-------------------------------------+---------------------------------------+
-                                      ^
-                                      |
-+-------------------------------------+---------------------------------------+
-|                            Pvm.Infrastructure                               |
-| (NTFS Junctions, Win32 Registry PATH, HTTP Scraper, ZIP, JSON Serialization)|
-+-----------------------------------------------------------------------------+
+src/
+├── Pvm.Core/            # Pure Domain Models, Value Objects, Port Interfaces (Zero OS/Infrastructure dependencies)
+├── Pvm.Application/     # Use Case Orchestrators, Version Resolution, Ini Editing, PATH Management
+├── Pvm.Infrastructure/  # Windows & POSIX Platform Adapters (Junctions, Symlinks, Registry, Web Downloads)
+├── Pvm.Cli/             # Spectre.Console CLI Presentation Layer & Command Routing
+└── Pvm.Setup/           # Windows GUI Setup Wizard & Transactional Installer Engine
 ```
 
-### Key Architectural Highlights:
-1. **Strict Dependency Rule**: `Pvm.Core` has **zero dependencies** on external frameworks, UI, or file access. `Pvm.Application` and `Pvm.Infrastructure` depend strictly inward on `Pvm.Core`.
-2. **Result Monad Pattern (`Result<T>`)**: Zero exception-driven control flow across domain and application layers. Operations return explicit monad results, ensuring absolute predictability and graceful error handling.
-3. **Source-Generated JSON (`PvmJsonSerializerContext`)**: 100% reflection-free serialization, making PVM fully compatible with **.NET 8 Native AOT** and **Trimming** (single-file compilation without warnings).
-4. **Automated Architecture Enforcement**: Any violation of layering or namespace rules is immediately caught at compile-time by `Pvm.Architecture.Tests`.
-5. **100% Unit Test Verification**: **57 unit tests** across 5 suites (`Core`, `Architecture`, `Application`, `Infrastructure`, `Cli`) pass cleanly on every build.
+### Running Unit Tests Locally
+```powershell
+dotnet test --configuration Release
+```
+*All 57 core, application, and infrastructure architectural unit tests execute in under 2 seconds.*
 
 ---
 
-## 🛠️ Troubleshooting & FAQ
+<div align="center">
 
-### Q1: When I run `php -v`, Windows says `vcruntime140.dll was not found`.
-**Answer**: PHP 8.0+ binaries on Windows require the Microsoft Visual C++ 2015-2022 Redistributable runtime DLLs.  
-**Fix**: Run `pvm doctor`. If the **Visual C++ Redistributable** check fails, download and install the official Microsoft x64 runtime: [https://aka.ms/vs/17/release/vc_redist.x64.exe](https://aka.ms/vs/17/release/vc_redist.x64.exe).
+**Engineered with ❤️ for PHP developers on Windows, macOS & Linux.**  
+[Report an Issue](https://github.com/hasanhawary/phpvm/issues) • [Contribute to PVM](https://github.com/hasanhawary/phpvm/pulls) • [View Releases](https://github.com/hasanhawary/phpvm/releases)
 
-### Q2: I ran `pvm use 8.3`, but when I type `php -v`, it still shows XAMPP or Laragon's older PHP 8.1 version.
-**Answer**: Another PHP directory (`C:\xampp\php` or `C:\Program Files\PHP`) is positioned *higher* in your Windows `PATH` than PVM's `%USERPROFILE%\.pvm\current` junction.  
-**Fix**: Run `pvm doctor`. The **External PHP Shadowing Conflicts** check will list exactly which conflicting directories are blocking PVM. Remove those paths from your Windows Environment Variables or run `pvm doctor --fix`.
-
-### Q3: Why does PowerShell show `Execution_Policy` errors when running `.ps1` scripts?
-**Answer**: By default, Windows restricts running scripts on unconfigured systems.  
-**Fix**: Open PowerShell as Administrator and enable local script execution for your user:
-```powershell
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-### Q4: How do I use PVM inside CI/CD pipelines (like GitHub Actions) or temporary scripts?
-**Answer**: Instead of altering system-wide junctions, use `pvm env --ps1` (PowerShell) or `pvm env --cmd` (Command Prompt) to evaluate and export temporary environment variables directly into the current shell session:
-```powershell
-pvm env --ps1 | Invoke-Expression
-```
-
----
-
-## 📄 Contributing & License
-
-We welcome contributions from Windows software developers! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on architectural rules, unit testing, and submitting pull requests.
-
-This project is open-source and licensed under the **[MIT License](LICENSE)**.
+</div>
