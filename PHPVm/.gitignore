@@ -9,3 +9,4 @@ obj/
 *.bak
 .pvm/
 test-results/
+dist/

@@ -56,6 +56,13 @@ public static class Program
 
             config.AddCommand<DoctorCommand>("doctor")
                 .WithDescription("Run automated system health checks and diagnostics.");
+
+            config.AddCommand<SelfUpdateCommand>("self-update")
+                .WithAlias("update")
+                .WithDescription("Check for updates and self-update PVM in place.");
+
+            config.AddCommand<CompletionCommand>("completion")
+                .WithDescription("Generate shell argument completion scripts (powershell, cmd, bash).");
         });
 
         try
@@ -71,7 +78,8 @@ public static class Program
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton<IBuildSource>(_ => new OfficialPhpBuildSource(new HttpClient()));
+        services.AddSingleton(new HttpClient());
+        services.AddSingleton<IBuildSource>(sp => new OfficialPhpBuildSource(sp.GetRequiredService<HttpClient>()));
         services.AddSingleton<IConfigStore, JsonConfigStore>();
         services.AddSingleton<IJunctionManager, WindowsJunctionManager>();
         services.AddSingleton<IPhpProcess, PhpProcessRunner>();
@@ -81,6 +89,7 @@ public static class Program
         services.AddSingleton<IPathManager, WindowsPathManager>();
         services.AddSingleton<IIniManager, PhpIniManager>();
         services.AddSingleton<IAliasManager, JsonAliasManager>();
+        services.AddSingleton<ISelfUpdateManager, GitHubSelfUpdateManager>();
         services.AddSingleton<IDoctorCheck, PvmDirectoryCheck>();
         services.AddSingleton<IDoctorCheck, JunctionPathCheck>();
         services.AddSingleton<IDoctorCheck, PathHygieneCheck>();
@@ -90,9 +99,13 @@ public static class Program
         services.AddSingleton<IniService>();
         services.AddSingleton<AliasService>();
         services.AddSingleton<DoctorService>();
+        services.AddSingleton<SelfUpdateService>();
         services.AddSingleton<SwitchService>();
         services.AddSingleton<InstallService>();
         services.AddSingleton<UninstallService>();
+        services.AddTransient<SelfUpdateCommand>();
+        services.AddTransient<CompletionCommand>();
     }
 }
+
 

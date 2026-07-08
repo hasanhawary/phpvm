@@ -15,7 +15,16 @@ public sealed class TypeResolver : ITypeResolver, IDisposable
     public object? Resolve(Type? type)
     {
         if (type is null) return null;
-        return _provider.GetService(type);
+        var instance = _provider.GetService(type);
+        if (instance is not null) return instance;
+        try
+        {
+            return ActivatorUtilities.CreateInstance(_provider, type);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public void Dispose()
