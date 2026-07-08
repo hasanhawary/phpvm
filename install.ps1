@@ -66,19 +66,37 @@ if (-not $zipUrl -or $zipUrl -eq "") {
     if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
 }
 
-# 4. Register in User Environment PATH
-Write-Host "`n[4/4] Ensuring PVM is registered in your User Environment PATH..." -ForegroundColor Yellow
+# 4. Register in User Environment PATH and Shell Profile
+Write-Host "`n[4/4] Ensuring PVM is registered in your User Environment PATH and PowerShell Profile..." -ForegroundColor Yellow
+$currentDir = "$Home\.pvm\current"
 $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
 if ($userPath -notlike "*$InstallDir*") {
-    $newPath = "$InstallDir;$userPath"
+    $newPath = "$InstallDir;$currentDir;$userPath"
     [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
-    Write-Host "Added $InstallDir permanently to your User PATH!" -ForegroundColor Green
+    Write-Host "Added PVM paths permanently to your User PATH!" -ForegroundColor Green
 } else {
     Write-Host "$InstallDir is already in your User PATH." -ForegroundColor Green
 }
 
+# Ensure non-admin sessions prioritize PVM over any System/Machine PHP installations via profile
+try {
+    $psProfiles = @(
+        "$Home\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1",
+        "$Home\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
+    )
+    $psConfig = "`n# PVM (PHP Version Manager)`n`$env:PATH = `"$currentDir;`$InstallDir;`$env:PATH`""
+    foreach ($file in $psProfiles) {
+        $dir = Split-Path -Parent $file
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $content = if (Test-Path $file) { Get-Content -Path $file -Raw -ErrorAction SilentlyContinue } else { "" }
+        if ($content -notlike "*\.pvm\current*") {
+            Add-Content -Path $file -Value $psConfig -Force
+        }
+    }
+} catch { }
+
 # Update current session PATH for immediate use
-$env:PATH = "$InstallDir;$env:PATH"
+$env:PATH = "$currentDir;$InstallDir;$env:PATH"
 
 $exePath = Join-Path $InstallDir "pvm.exe"
 if (Test-Path $exePath) {

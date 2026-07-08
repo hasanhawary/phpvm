@@ -108,7 +108,7 @@ esac
 
 echo "[4/4] Configuring shell environment variables ($HOME/.bashrc, $HOME/.zshrc)..."
 SHELL_CONFIGS=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.bash_profile" "$HOME/.profile")
-PATH_ENTRY='export PATH="$HOME/.pvm/bin:$PATH"'
+PATH_ENTRY='export PATH="$HOME/.pvm/current:$HOME/.pvm/bin:$PATH"'
 
 for CONFIG in "${SHELL_CONFIGS[@]}"; do
     if [ -f "$CONFIG" ]; then
