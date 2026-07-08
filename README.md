@@ -29,56 +29,90 @@ On Windows, managing multiple PHP versions across different projects traditional
 
 ---
 
-## 📦 Installation (Choose One of 3 Ways)
+## 📦 Installation Guide (6 Comprehensive Methods)
 
-PVM is designed to be installed in under 10 seconds. Choose the installation method that fits your workflow:
+PVM is engineered for universal compatibility across PowerShell, Command Prompt, Git Bash, and Package Managers. Choose the installation method that best fits your workflow:
 
-### Option 1: One-Line Script Installation via URL (Recommended)
-Just like `rustup`, `bun`, or `nvm`, you can install PVM directly from PowerShell without manual downloading. Open PowerShell and run:
+---
+
+### Method 1: One-Line PowerShell Script (`install.ps1`) — Recommended for Windows
+Just like `rustup`, `bun`, or `nvm`, you can install PVM directly inside PowerShell without manual downloading. Open PowerShell and run:
 
 ```powershell
 irm https://raw.githubusercontent.com/hasanhawary/phpvm/main/install.ps1 | iex
 ```
-
-**What this script does automatically:**
-1. Downloads the latest self-contained `pvm-win-x64.zip` from official GitHub Releases.
-2. Extracts `pvm.exe` into `%USERPROFILE%\.pvm\bin\pvm.exe`.
-3. Permanently registers `%USERPROFILE%\.pvm\bin` into your Windows User `PATH` environment variable.
-4. Refreshes your session so you can start using `pvm` immediately!
+*Automatically downloads the latest `pvm.exe`, installs to `%USERPROFILE%\.pvm\bin\pvm.exe`, registers in your User `PATH`, and broadcasts environment updates across Windows.*
 
 ---
 
-### Option 2: Standalone Desktop Setup Wizard (`pvm-setup.exe`) or Zip Archive
-If you prefer downloading files directly from your browser just like `nvm-windows` (`nvm-setup.exe`):
+### Method 2: One-Line Bash Script (`install.sh`) — For Git Bash / MSYS / macOS / Linux
+If you work inside **Git Bash**, **Cygwin**, **macOS (`Darwin`)**, or **Linux**, run our universal POSIX shell installer using `curl` or `wget` (just like `nvm-sh`):
+
+**Via cURL:**
+```bash
+curl -o- https://raw.githubusercontent.com/hasanhawary/phpvm/main/install.sh | bash
+```
+
+**Or via Wget:**
+```bash
+wget -qO- https://raw.githubusercontent.com/hasanhawary/phpvm/main/install.sh | bash
+```
+*On Windows Git Bash, this automatically extracts the native Windows x64 binary to `$HOME/.pvm/bin/pvm.exe` and configures your `~/.bashrc` / `~/.zshrc` automatically!*
+
+---
+
+### Method 3: Standalone Windows GUI Setup Wizard (`pvm-setup.exe`)
+If you prefer a classic, visual desktop setup window (`like nvm-setup.exe`):
 
 1. Go to the official **[GitHub Releases Page](https://github.com/hasanhawary/phpvm/releases)**.
 2. Download **`pvm-setup.exe`** (our standalone 1-click desktop setup wizard executable).
 3. Double-click `pvm-setup.exe` (or run `pvm-setup.exe /S` for silent unattended installation).
-   - *The wizard automatically installs `pvm.exe` to `%USERPROFILE%\.pvm\bin\pvm.exe`, creates your system directories (`versions/`, `current/`), registers PVM globally in your Windows User `PATH`, and broadcasts environment change notifications!*
-4. Open a **new** PowerShell or Command Prompt terminal and verify installation:
-   ```powershell
-   pvm --help
-   ```
-
-*(Alternatively, you can download `pvm-win-x64.zip` and manually extract `pvm.exe` to your `~/.pvm/bin/` folder).*
+   - *A visual Windows dialog wizard opens on your desktop, lets you customize your path, registers your `PATH` globally, and completes installation in seconds without requiring source code.*
 
 ---
 
-### Option 3: Manual Developer Build from Source (`git clone`)
-If you want to build PVM directly from source code using the .NET 8 SDK:
+### Method 4: Package Managers (`Scoop`, `Chocolatey`, `Homebrew`)
 
-1. **Prerequisite**: Ensure you have [Git](https://git-scm.com/) and the [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) installed.
-2. Clone the repository and navigate into the project folder:
+#### For Windows via Scoop:
+```powershell
+scoop bucket add phpvm https://github.com/hasanhawary/phpvm.git
+scoop install pvm
+```
+
+#### For Windows via Chocolatey:
+```powershell
+choco install pvm
+```
+
+#### For macOS / Linux via Homebrew:
+```bash
+brew tap hasanhawary/phpvm
+brew install pvm
+```
+
+---
+
+### Method 5: Pre-built Binary Zip Archive (`pvm-win-x64.zip`)
+If you prefer manual extraction:
+
+1. Download `pvm-win-x64.zip` from the **[GitHub Releases Page](https://github.com/hasanhawary/phpvm/releases)**.
+2. Extract `pvm.exe` into `C:\Users\<YourUsername>\.pvm\bin\pvm.exe`.
+3. Add `C:\Users\<YourUsername>\.pvm\bin` to your Windows User `PATH`:
    ```powershell
-   git clone https://github.com/hasanhawary/phpvm.git
-   cd phpvm
+   $pvmBin = "$env:USERPROFILE\.pvm\bin"; [Environment]::SetEnvironmentVariable("PATH", "$pvmBin;" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")
    ```
-3. Run our automated build and install script:
-   ```powershell
-   # Compiles Release build, runs all 57 unit tests, and installs pvm.exe globally
-   .\build.ps1
-   ```
-   *Note: `build.ps1` automatically builds `pvm.exe`, copies it to `%USERPROFILE%\.pvm\bin\pvm.exe`, and registers it in your User `PATH`.*
+
+---
+
+### Method 6: Manual Developer Build from Source (`git clone`)
+To build PVM directly from source using the .NET 8 SDK:
+
+```powershell
+git clone https://github.com/hasanhawary/phpvm.git
+cd phpvm
+.\build.ps1
+```
+*Runs all 57 unit tests, compiles single-file trimmed AOT-compatible binaries (`pvm.exe` and `pvm-setup.exe`), and installs globally.*
 
 ---
 
