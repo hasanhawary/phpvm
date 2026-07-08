@@ -2,10 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.IO.Compression;
-using System.Linq;
-using System.Net.Http;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -13,20 +9,6 @@ namespace Pvm.Setup;
 
 public class SetupWizardForm : Form
 {
-    private const int HWND_BROADCAST = 0xffff;
-    private const int WM_SETTINGCHANGE = 0x001A;
-    private const int SMTO_ABORTIFHUNG = 0x0002;
-
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    private static extern IntPtr SendMessageTimeout(
-        IntPtr hWnd,
-        int Msg,
-        IntPtr wParam,
-        string lParam,
-        int fuFlags,
-        int uTimeout,
-        out IntPtr lpdwResult);
-
     private TextBox _installPathTextBox = null!;
     private Button _browseButton = null!;
     private Button _installButton = null!;
@@ -127,7 +109,7 @@ public class SetupWizardForm : Form
 
         _statusLabel = new Label
         {
-            Text = "Click 'Install' to begin setup and register PVM in your User PATH.",
+            Text = "Click 'Install' to begin transactional setup and register PVM in your User PATH.",
             Location = new Point(25, 180),
             Size = new Size(510, 45),
             ForeColor = Color.FromArgb(60, 60, 60)
@@ -229,134 +211,28 @@ public class SetupWizardForm : Form
         _installPathTextBox.Enabled = false;
         _closeButton.Enabled = false;
 
-        try
+        var result = await InstallerEngine.RunInstallationAsync(
+            installBinPath,
+            isSilent: false,
+            progressCallback: (progress, statusText) => UpdateStatus(progress, statusText));
+
+        if (result.Success)
         {
-            var pvmRoot = Path.GetDirectoryName(installBinPath) ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".pvm");
-            var pvmVersions = Path.Combine(pvmRoot, "versions");
-            var pvmCurrent = Path.Combine(pvmRoot, "current");
-            var pvmArchives = Path.Combine(pvmRoot, "archives");
-            var targetExe = Path.Combine(installBinPath, "pvm.exe");
-
-            // Step 1: Create Directories
-            UpdateStatus(15, $"Creating directory structure inside {pvmRoot}...");
-            await Task.Delay(200);
-
-            Directory.CreateDirectory(installBinPath);
-            Directory.CreateDirectory(pvmVersions);
-            Directory.CreateDirectory(pvmArchives);
-            if (!Directory.Exists(pvmCurrent))
-            {
-                Directory.CreateDirectory(pvmCurrent);
-            }
-
-            // Step 2: Locate and install pvm.exe
-            UpdateStatus(40, "Installing pvm.exe core executable...");
-            await Task.Delay(200);
-
-            var setupDir = AppDomain.CurrentDomain.BaseDirectory;
-            var adjacentExe = Path.Combine(setupDir, "pvm.exe");
-            var adjacentDistExe = Path.Combine(setupDir, "..", "dist", "pvm.exe");
-            var localBuildExe = Path.Combine(setupDir, "..", "src", "Pvm.Cli", "bin", "Release", "net8.0", "win-x64", "pvm.exe");
-
-            if (File.Exists(adjacentExe))
-            {
-                File.Copy(adjacentExe, targetExe, true);
-            }
-            else if (File.Exists(adjacentDistExe))
-            {
-                File.Copy(adjacentDistExe, targetExe, true);
-            }
-            else if (File.Exists(localBuildExe))
-            {
-                File.Copy(localBuildExe, targetExe, true);
-            }
-            else
-            {
-                UpdateStatus(50, "Downloading latest standalone pvm.exe from official GitHub Releases...");
-                using var client = new HttpClient();
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("PvmSetupInstaller/1.0");
-
-                var downloadUrl = "https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-win-x64.zip";
-                var tempZip = Path.Combine(Path.GetTempPath(), "pvm-win-x64.zip");
-
-                var response = await client.GetAsync(downloadUrl);
-                response.EnsureSuccessStatusCode();
-                await using (var fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None))
-                {
-                    await response.Content.CopyToAsync(fs);
-                }
-
-                using var archive = ZipFile.OpenRead(tempZip);
-                var entry = archive.Entries.FirstOrDefault(e => e.Name.Equals("pvm.exe", StringComparison.OrdinalIgnoreCase));
-                if (entry != null)
-                {
-                    entry.ExtractToFile(targetExe, true);
-                }
-                else
-                {
-                    throw new InvalidOperationException("pvm.exe was not found inside downloaded release zip.");
-                }
-                if (File.Exists(tempZip)) File.Delete(tempZip);
-            }
-
-            if (!File.Exists(targetExe))
-            {
-                throw new FileNotFoundException("Failed to install pvm.exe to destination folder.");
-            }
-
-            // Step 3: Register in PATH
-            UpdateStatus(80, "Registering PVM directories in Windows User Environment PATH...");
-            await Task.Delay(250);
-
-            var currentUserPath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? "";
-            var pathEntries = currentUserPath
-                .Split(';', StringSplitOptions.RemoveEmptyEntries)
-                .Select(p => p.Trim())
-                .ToList();
-
-            bool pathChanged = false;
-            if (!pathEntries.Any(p => string.Equals(p, installBinPath, StringComparison.OrdinalIgnoreCase)))
-            {
-                pathEntries.Insert(0, installBinPath);
-                pathChanged = true;
-            }
-            if (!pathEntries.Any(p => string.Equals(p, pvmCurrent, StringComparison.OrdinalIgnoreCase)))
-            {
-                pathEntries.Insert(1, pvmCurrent);
-                pathChanged = true;
-            }
-
-            if (pathChanged)
-            {
-                var newPath = string.Join(";", pathEntries);
-                Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.User);
-            }
-
-            // Step 4: Broadcast environment notification
-            UpdateStatus(90, "Broadcasting Windows environment notification (WM_SETTINGCHANGE)...");
-            try
-            {
-                SendMessageTimeout((IntPtr)HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, "Environment", SMTO_ABORTIFHUNG, 3000, out _);
-            }
-            catch { /* ignore broadcast timeout */ }
-
-            UpdateStatus(100, $"✔ PVM Installed Successfully to {targetExe}!\nYour environment PATH is updated. Click 'Open PowerShell' or open any new terminal window to start.");
             _statusLabel.ForeColor = Color.FromArgb(16, 124, 16);
             _progressBar.Value = 100;
-
             _installButton.Visible = false;
             _openTerminalButton.Visible = true;
             _closeButton.Text = "Finish";
             _closeButton.Enabled = true;
         }
-        catch (Exception ex)
+        else
         {
-            UpdateStatus(_progressBar.Value, $"❌ Installation Error: {ex.Message}");
             _statusLabel.ForeColor = Color.Red;
             _installButton.Enabled = true;
             _browseButton.Enabled = true;
             _installPathTextBox.Enabled = true;
             _closeButton.Enabled = true;
+            MessageBox.Show(result.Message, "PVM Installation Rollback", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -374,37 +250,8 @@ public class SetupWizardForm : Form
 
     public static async Task<int> RunSilentInstallationAsync()
     {
-        await Task.CompletedTask;
-        try
-        {
-            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var pvmRoot = Path.Combine(userProfile, ".pvm");
-            var pvmBin = Path.Combine(pvmRoot, "bin");
-            var pvmVersions = Path.Combine(pvmRoot, "versions");
-            var pvmCurrent = Path.Combine(pvmRoot, "current");
-            var targetExe = Path.Combine(pvmBin, "pvm.exe");
-
-            Directory.CreateDirectory(pvmBin);
-            Directory.CreateDirectory(pvmVersions);
-            Directory.CreateDirectory(Path.Combine(pvmRoot, "archives"));
-            if (!Directory.Exists(pvmCurrent)) Directory.CreateDirectory(pvmCurrent);
-
-            var setupDir = AppDomain.CurrentDomain.BaseDirectory;
-            var adjacentExe = Path.Combine(setupDir, "pvm.exe");
-            var adjacentDistExe = Path.Combine(setupDir, "..", "dist", "pvm.exe");
-            if (File.Exists(adjacentExe)) File.Copy(adjacentExe, targetExe, true);
-            else if (File.Exists(adjacentDistExe)) File.Copy(adjacentDistExe, targetExe, true);
-
-            var currentUserPath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? "";
-            var entries = currentUserPath.Split(';', StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToList();
-            bool changed = false;
-            if (!entries.Any(p => string.Equals(p, pvmBin, StringComparison.OrdinalIgnoreCase))) { entries.Insert(0, pvmBin); changed = true; }
-            if (!entries.Any(p => string.Equals(p, pvmCurrent, StringComparison.OrdinalIgnoreCase))) { entries.Insert(1, pvmCurrent); changed = true; }
-            if (changed) Environment.SetEnvironmentVariable("PATH", string.Join(";", entries), EnvironmentVariableTarget.User);
-
-            try { SendMessageTimeout((IntPtr)HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, "Environment", SMTO_ABORTIFHUNG, 3000, out _); } catch { }
-            return 0;
-        }
-        catch { return 1; }
+        var defaultBin = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".pvm", "bin");
+        var result = await InstallerEngine.RunInstallationAsync(defaultBin, isSilent: true, progressCallback: null);
+        return result.Success ? 0 : 1;
     }
 }
