@@ -61,13 +61,12 @@ wget -qO- https://raw.githubusercontent.com/hasanhawary/phpvm/main/install.sh | 
 
 ---
 
-### Method 3: Standalone Windows GUI Setup Wizard (`pvm-setup.exe`)
+### Method 3: Standalone Windows GUI Setup Wizard (`pvm-setup.exe`) — Direct Download
 If you prefer a classic, visual desktop setup window (`like nvm-setup.exe`):
 
-1. Go to the official **[GitHub Releases Page](https://github.com/hasanhawary/phpvm/releases)**.
-2. Download **`pvm-setup.exe`** (our standalone 1-click desktop setup wizard executable).
-3. Double-click `pvm-setup.exe` (or run `pvm-setup.exe /S` for silent unattended installation).
-   - *A visual Windows dialog wizard opens on your desktop, lets you customize your path, registers your `PATH` globally, and completes installation in seconds without requiring source code.*
+1. **[Click Here to Download `pvm-setup.exe` Directly](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-setup.exe)** *(or view all releases on the [Releases Page](https://github.com/hasanhawary/phpvm/releases))*.
+2. Double-click `pvm-setup.exe` (or run `pvm-setup.exe /S` from terminal for silent unattended installation).
+   - *A visual Windows dialog wizard opens on your desktop, lets you customize your path, checks for running PVM processes, performs a transactional copy with rollback capability, registers your `PATH` globally, and completes installation in seconds without requiring source code.*
 
 ---
 
@@ -92,12 +91,12 @@ brew install pvm
 
 ---
 
-### Method 5: Pre-built Binary Zip Archive (`pvm-win-x64.zip`)
-If you prefer manual extraction:
+### Method 5: Pre-built Binary Zip Archive (`pvm-win-x64.zip`) — Direct Download
+If you prefer manual extraction without an installer:
 
-1. Download `pvm-win-x64.zip` from the **[GitHub Releases Page](https://github.com/hasanhawary/phpvm/releases)**.
-2. Extract `pvm.exe` into `C:\Users\<YourUsername>\.pvm\bin\pvm.exe`.
-3. Add `C:\Users\<YourUsername>\.pvm\bin` to your Windows User `PATH`:
+1. **[Click Here to Download `pvm-win-x64.zip` Directly](https://github.com/hasanhawary/phpvm/releases/latest/download/pvm-win-x64.zip)**.
+2. Extract `pvm.exe` into `%USERPROFILE%\.pvm\bin\pvm.exe`.
+3. Add `%USERPROFILE%\.pvm\bin` to your Windows User `PATH`:
    ```powershell
    $pvmBin = "$env:USERPROFILE\.pvm\bin"; [Environment]::SetEnvironmentVariable("PATH", "$pvmBin;" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")
    ```
