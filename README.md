@@ -48,25 +48,19 @@ irm https://raw.githubusercontent.com/hasanhawary/phpvm/main/install.ps1 | iex
 
 ---
 
-### Option 2: Pre-built Executable / Zip Installation (`.exe` / Archive)
-If you prefer downloading files manually from your browser:
+### Option 2: Standalone Desktop Setup Wizard (`pvm-setup.exe`) or Zip Archive
+If you prefer downloading files directly from your browser just like `nvm-windows` (`nvm-setup.exe`):
 
 1. Go to the official **[GitHub Releases Page](https://github.com/hasanhawary/phpvm/releases)**.
-2. Download the latest `pvm-win-x64.zip` archive (or `pvm.exe` standalone binary).
-3. Extract `pvm.exe` into a dedicated folder in your user profile, for example:
-   ```text
-   C:\Users\<YourUsername>\.pvm\bin\pvm.exe
-   ```
-4. Add that folder to your Windows User `PATH`:
-   - **Via Windows GUI**: Press `Win + R`, type `sysdm.cpl`, press Enter -> go to **Advanced** tab -> **Environment Variables** -> under **User variables**, select `Path` -> Click **Edit** -> Click **New** -> paste `C:\Users\<YourUsername>\.pvm\bin` -> Click **OK**.
-   - **Or via PowerShell (One-liner)**:
-     ```powershell
-     $pvmBin = "$env:USERPROFILE\.pvm\bin"; [Environment]::SetEnvironmentVariable("PATH", "$pvmBin;" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")
-     ```
-5. Open a **new** PowerShell or Command Prompt terminal and verify installation:
+2. Download **`pvm-setup.exe`** (our standalone 1-click desktop setup wizard executable).
+3. Double-click `pvm-setup.exe` (or run `pvm-setup.exe /S` for silent unattended installation).
+   - *The wizard automatically installs `pvm.exe` to `%USERPROFILE%\.pvm\bin\pvm.exe`, creates your system directories (`versions/`, `current/`), registers PVM globally in your Windows User `PATH`, and broadcasts environment change notifications!*
+4. Open a **new** PowerShell or Command Prompt terminal and verify installation:
    ```powershell
    pvm --help
    ```
+
+*(Alternatively, you can download `pvm-win-x64.zip` and manually extract `pvm.exe` to your `~/.pvm/bin/` folder).*
 
 ---
 

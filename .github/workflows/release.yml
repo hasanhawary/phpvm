@@ -23,17 +23,22 @@ jobs:
     - name: Run Full Test Suite
       run: dotnet test pvm.sln -c Release
 
-    - name: Publish Standalone Self-Contained Executable
+    - name: Publish Standalone Self-Contained Executable (PVM Core)
       run: dotnet publish src/Pvm.Cli/Pvm.Cli.csproj -c Release -r win-x64 -o ./publish
+
+    - name: Publish Standalone Self-Contained Setup Wizard (PVM Setup)
+      run: dotnet publish src/Pvm.Setup/Pvm.Setup.csproj -c Release -r win-x64 -o ./publish
 
     - name: Package Release Archive
       run: |
-        Compress-Archive -Path ./publish/pvm.exe, ./README.md, ./LICENSE -DestinationPath ./pvm-win-x64.zip
+        Compress-Archive -Path ./publish/pvm.exe, ./publish/pvm-setup.exe, ./README.md, ./LICENSE -DestinationPath ./pvm-win-x64.zip
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        files: ./pvm-win-x64.zip
+        files: |
+          ./pvm-win-x64.zip
+          ./publish/pvm-setup.exe
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

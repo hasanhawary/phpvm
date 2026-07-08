@@ -56,16 +56,17 @@ if (-not $SkipTests) {
     Write-Host "`n[4/4] Skipping unit tests..." -ForegroundColor DarkYellow
 }
 
-Write-Host "`n[Publish] Publishing standalone self-contained win-x64 executable..." -ForegroundColor Green
+Write-Host "`n[Publish] Publishing standalone self-contained win-x64 executables..." -ForegroundColor Green
 dotnet publish (Join-Path $root "src\Pvm.Cli\Pvm.Cli.csproj") -c Release -r win-x64 -o $distDir
+dotnet publish (Join-Path $root "src\Pvm.Setup\Pvm.Setup.csproj") -c Release -r win-x64 -o $distDir
 
 $exePath = Join-Path $distDir "pvm.exe"
-if (Test-Path $exePath) {
-    $fileInfo = Get-Item $exePath
-    $sizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
+$setupPath = Join-Path $distDir "pvm-setup.exe"
+if ((Test-Path $exePath) -and (Test-Path $setupPath)) {
     Write-Host "`n========================================================" -ForegroundColor Green
     Write-Host " BUILD SUCCESSFUL! 🎉" -ForegroundColor Green
-    Write-Host " Standalone Executable: $exePath ($sizeMB MB)" -ForegroundColor Green
+    Write-Host " Standalone Executable: $exePath ($([math]::Round((Get-Item $exePath).Length / 1MB, 2)) MB)" -ForegroundColor Green
+    Write-Host " Standalone Setup EXE:  $setupPath ($([math]::Round((Get-Item $setupPath).Length / 1MB, 2)) MB)" -ForegroundColor Green
     Write-Host "========================================================" -ForegroundColor Green
     
     Write-Host "`nVerifying executable version and help output:" -ForegroundColor Cyan
