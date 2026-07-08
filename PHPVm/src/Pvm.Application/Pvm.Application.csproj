@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <RootNamespace>Pvm.Application</RootNamespace>
-    <AssemblyName>Pvm.Application</AssemblyName>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Pvm.Core\Pvm.Core.csproj" />
-  </ItemGroup>
-</Project>
