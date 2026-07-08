@@ -175,11 +175,18 @@ public class SetupWizardForm : Form
         {
             try
             {
+                var pvmBinPath = _installPathTextBox.Text.Replace("\"", "");
+                var currentPath = Environment.GetEnvironmentVariable("PATH") ?? "";
+                if (!currentPath.Contains(pvmBinPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    Environment.SetEnvironmentVariable("PATH", $"{pvmBinPath};{currentPath}", EnvironmentVariableTarget.Process);
+                }
+
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
                     Arguments = "-NoExit -Command \"Write-Host 'Welcome to PVM!' -ForegroundColor Cyan; pvm --help\"",
-                    UseShellExecute = true
+                    UseShellExecute = false
                 });
                 this.Close();
             }

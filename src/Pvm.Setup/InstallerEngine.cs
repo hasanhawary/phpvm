@@ -581,15 +581,17 @@ public static class InstallerEngine
             logger.LogInfo($"Registered '{pvmCurrent}' at position 1 in User PATH.");
         }
 
+        var newPath = string.Join(";", entries);
+        Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.Process);
+
         if (changed)
         {
-            var newPath = string.Join(";", entries);
             Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.User);
-            logger.LogInfo("Successfully committed updated PATH to Windows Registry (EnvironmentVariableTarget.User).");
+            logger.LogInfo("Successfully committed updated PATH to current process and Windows Registry (EnvironmentVariableTarget.User).");
         }
         else
         {
-            logger.LogInfo("PVM directories are already registered in User PATH.");
+            logger.LogInfo("PVM directories are already registered in User PATH. Current process PATH updated.");
         }
     }
 

@@ -61,17 +61,45 @@ case "$OS_TYPE" in
         fi
         ;;
     Darwin|Linux)
-        echo "[2/4] Cross-platform environment ($OS_TYPE) detected."
-        echo "Checking for local .NET 8 SDK / binary build..."
-        if [ -f "./dist/pvm" ]; then
-            cp "./dist/pvm" "$INSTALL_DIR/pvm"
-            chmod +x "$INSTALL_DIR/pvm"
-        elif [ -f "./dist/pvm.exe" ]; then
-            # WSL or Wine support
-            cp "./dist/pvm.exe" "$INSTALL_DIR/pvm.exe"
-            chmod +x "$INSTALL_DIR/pvm.exe"
+        ARCH="$(uname -m)"
+        if [ "$OS_TYPE" = "Darwin" ]; then
+            if [ "$ARCH" = "arm64" ]; then
+                TARGET_ARCH="osx-arm64"
+            else
+                TARGET_ARCH="osx-x64"
+            fi
         else
-            echo "Note: To compile natively for $OS_TYPE, run: dotnet publish -c Release -r $(uname -s | tr '[:upper:]' '[:lower:]')-x64"
+            if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+                TARGET_ARCH="linux-arm64"
+            else
+                TARGET_ARCH="linux-x64"
+            fi
+        fi
+
+        TAR_URL="https://github.com/$REPO/releases/latest/download/pvm-$TARGET_ARCH.tar.gz"
+        echo "[2/4] Downloading native cross-platform binary for $OS_TYPE ($TARGET_ARCH) from $TAR_URL..."
+        TEMP_TAR="$HOME/.pvm/temp_pvm.tar.gz"
+
+        if command -v curl >/dev/null 2>&1; then
+            curl -fSL "$TAR_URL" -o "$TEMP_TAR" || {
+                echo "Notice: Online release archive ($TAR_URL) not found yet. Checking local repository build..."
+                if [ -f "./dist/pvm" ]; then cp "./dist/pvm" "$INSTALL_DIR/pvm"; chmod +x "$INSTALL_DIR/pvm"; fi
+            }
+        elif command -v wget >/dev/null 2>&1; then
+            wget -q "$TAR_URL" -O "$TEMP_TAR" || {
+                if [ -f "./dist/pvm" ]; then cp "./dist/pvm" "$INSTALL_DIR/pvm"; chmod +x "$INSTALL_DIR/pvm"; fi
+            }
+        fi
+
+        if [ -f "$TEMP_TAR" ]; then
+            echo "[3/4] Extracting native binary archive into $INSTALL_DIR..."
+            tar -xzf "$TEMP_TAR" -C "$INSTALL_DIR" || true
+            chmod +x "$INSTALL_DIR/pvm" 2>/dev/null || true
+            rm -f "$TEMP_TAR"
+        elif [ -f "$INSTALL_DIR/pvm" ]; then
+            chmod +x "$INSTALL_DIR/pvm"
+        else
+            echo "Note: Release archive not found online. If compiling from source, run: dotnet publish src/Pvm.Cli/Pvm.Cli.csproj -c Release -r $TARGET_ARCH -o $INSTALL_DIR"
         fi
         ;;
     *)
