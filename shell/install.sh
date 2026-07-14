@@ -26,19 +26,24 @@ PVM_BIN="$PVM_HOME/bin"
 PVM_VERSIONS="$PVM_HOME/versions"
 PVM_CURRENT="$PVM_HOME/current"
 
-RAW_BASE_URL="https://raw.githubusercontent.com/hasanhawary/phpvm/main/shell"
+RAW_BASE_URL="https://raw.githubusercontent.com/hasanhawary/phpvm/main"
 
 print_info "Installing Universal PVM (PHP Version Manager) into ${C_BOLD}$PVM_HOME${C_RESET}..."
 
 mkdir -p "$PVM_BIN" "$PVM_VERSIONS"
 
 # Download or copy from local repo if running from cloned dir
-if [ -f "$(dirname "$0")/pvm" ]; then
+SCRIPT_DIR=""
+if [ -n "$0" ] && [ -f "$0" ] && [ "$0" != "bash" ] && [ "$0" != "sh" ] && [ "$0" != "-bash" ] && [ "$0" != "-sh" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
+fi
+
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/pvm" ]; then
     print_info "Copying local shell scripts to $PVM_BIN..."
-    cp -f "$(dirname "$0")/pvm" "$PVM_BIN/pvm"
+    cp -f "$SCRIPT_DIR/pvm" "$PVM_BIN/pvm"
     chmod +x "$PVM_BIN/pvm"
-    if [ -f "$(dirname "$0")/pvm.ps1" ]; then cp -f "$(dirname "$0")/pvm.ps1" "$PVM_BIN/pvm.ps1"; fi
-    if [ -f "$(dirname "$0")/pvm.cmd" ]; then cp -f "$(dirname "$0")/pvm.cmd" "$PVM_BIN/pvm.cmd"; fi
+    if [ -f "$SCRIPT_DIR/pvm.ps1" ]; then cp -f "$SCRIPT_DIR/pvm.ps1" "$PVM_BIN/pvm.ps1"; fi
+    if [ -f "$SCRIPT_DIR/pvm.cmd" ]; then cp -f "$SCRIPT_DIR/pvm.cmd" "$PVM_BIN/pvm.cmd"; fi
 else
     print_info "Downloading latest PVM scripts from GitHub..."
     if command -v curl >/dev/null 2>&1; then

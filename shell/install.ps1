@@ -31,12 +31,15 @@ Print-Info ("Installing PVM (PHP Version Manager) into {0}..." -f $pvmHome)
 [void][System.IO.Directory]::CreateDirectory($pvmBin)
 [void][System.IO.Directory]::CreateDirectory($pvmVersions)
 
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$localPs1 = [System.IO.Path]::Combine($scriptDir, "pvm.ps1")
-$localCmd = [System.IO.Path]::Combine($scriptDir, "pvm.cmd")
-$localBash = [System.IO.Path]::Combine($scriptDir, "pvm")
+$scriptDir = $null
+if ($MyInvocation -and $MyInvocation.MyCommand -and $MyInvocation.MyCommand.Path -and (Test-Path $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue)) {
+    try { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path } catch {}
+}
+$localPs1 = if ($scriptDir) { [System.IO.Path]::Combine($scriptDir, "pvm.ps1") } else { $null }
+$localCmd = if ($scriptDir) { [System.IO.Path]::Combine($scriptDir, "pvm.cmd") } else { $null }
+$localBash = if ($scriptDir) { [System.IO.Path]::Combine($scriptDir, "pvm") } else { $null }
 
-if (Test-Path $localPs1) {
+if ($localPs1 -and (Test-Path $localPs1)) {
     Print-Info ("Copying local scripts from {0} to {1}..." -f $scriptDir, $pvmBin)
     $destPs1 = [System.IO.Path]::Combine($pvmBin, "pvm.ps1")
     $destCmd = [System.IO.Path]::Combine($pvmBin, "pvm.cmd")
@@ -46,7 +49,7 @@ if (Test-Path $localPs1) {
     if (Test-Path $localBash) { Copy-Item -Path $localBash -Destination $destBash -Force }
 } else {
     Print-Info "Downloading latest PVM scripts from GitHub..."
-    $baseUrl = "https://raw.githubusercontent.com/hasanhawary/phpvm/main/shell"
+    $baseUrl = "https://raw.githubusercontent.com/hasanhawary/phpvm/main"
     $destPs1 = [System.IO.Path]::Combine($pvmBin, "pvm.ps1")
     $destCmd = [System.IO.Path]::Combine($pvmBin, "pvm.cmd")
     $destBash = [System.IO.Path]::Combine($pvmBin, "pvm")
