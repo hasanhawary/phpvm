@@ -1,0 +1,881 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# PVM — Universal PHP Version Manager (Pure Shell Edition)
+# Version: 1.1.0-shell
+# Repository: https://github.com/hasanhawary/phpvm
+# License: MIT
+# ==============================================================================
+
+set -e
+
+# --- Configuration & Paths ---
+PVM_VERSION="1.1.0-shell"
+PVM_HOME="${PVM_HOME:-$HOME/.pvm}"
+PVM_VERSIONS_DIR="$PVM_HOME/versions"
+PVM_CURRENT_DIR="$PVM_HOME/current"
+PVM_BIN_DIR="$PVM_HOME/bin"
+PVM_ALIASES_FILE="$PVM_HOME/aliases.json"
+RELEASES_JSON_URL="https://windows.php.net/downloads/releases/releases.json"
+BASE_DOWNLOAD_URL="https://windows.php.net/downloads/releases/"
+GITHUB_API_LATEST="https://api.github.com/repos/hasanhawary/phpvm/releases/latest"
+
+# --- ANSI Colors & Styles ---
+if [[ -t 1 || "${PVM_FORCE_COLOR:-0}" != "0" ]]; then
+    C_RESET='\033[0m'
+    C_BOLD='\033[1m'
+    C_RED='\033[0;31m'
+    C_GREEN='\033[0;32m'
+    C_YELLOW='\033[1;33m'
+    C_BLUE='\033[0;34m'
+    C_CYAN='\033[0;36m'
+    C_GREY='\033[0;90m'
+else
+    C_RESET='' C_BOLD='' C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_CYAN='' C_GREY=''
+fi
+
+# --- Utility Functions ---
+print_info()    { printf "${C_CYAN}ℹ %s${C_RESET}\n" "$*"; }
+print_success() { printf "${C_GREEN}✔ %s${C_RESET}\n" "$*"; }
+print_warn()    { printf "${C_YELLOW}⚠ %s${C_RESET}\n" "$*"; }
+print_error()   { printf "${C_RED}✖ %s${C_RESET}\n" "$*" >&2; }
+
+ensure_directories() {
+    mkdir -p "$PVM_VERSIONS_DIR" "$PVM_BIN_DIR"
+    if [[ ! -s "$PVM_ALIASES_FILE" ]]; then
+        echo "{}" > "$PVM_ALIASES_FILE"
+    fi
+}
+
+detect_os() {
+    case "$OSTYPE" in
+        msys*|cygwin*|mingw*|win32*) echo "windows" ;;
+        darwin*) echo "darwin" ;;
+        linux*) echo "linux" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+detect_arch() {
+    local arch
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64|amd64) echo "x64" ;;
+        aarch64|arm64) echo "arm64" ;;
+        i386|i686) echo "x86" ;;
+        *) echo "$arch" ;;
+    esac
+}
+
+to_win_path() {
+    local p="$1"
+    if [[ $(detect_os) == "windows" ]] && command -v cygpath &>/dev/null; then
+        cygpath -m "$p"
+    else
+        echo "$p"
+    fi
+}
+
+# --- JSON Parsing Helpers ---
+json_get_key() {
+    local json_file
+    json_file=$(to_win_path "$1")
+    local key="$2"
+    if command -v jq &>/dev/null; then
+        jq -r ".[\"$key\"] // empty" "$json_file" 2>/dev/null
+    elif command -v python3 &>/dev/null; then
+        python3 -c "import sys, json;
+try: d=json.load(open('$json_file'))
+except: d={}
+print(d.get('$key', ''))" 2>/dev/null
+    else
+        grep -o '"'"$key"'"[[:space:]]*:[[:space:]]*"[^"]*"' "$json_file" | sed 's/.*:[[:space:]]*"\([^"]*\)"/\1/'
+    fi
+}
+
+json_set_key() {
+    local json_file
+    json_file=$(to_win_path "$1")
+    local key="$2" val="$3"
+    if command -v jq &>/dev/null; then
+        local tmp="${json_file}.tmp.$$"
+        jq ".[\"$key\"] = \"$val\"" "$json_file" > "$tmp" && mv "$tmp" "$json_file"
+    elif command -v python3 &>/dev/null; then
+        python3 -c "import sys, json;
+try: d=json.load(open('$json_file'))
+except: d={}
+d['$key']='$val'
+json.dump(d, open('$json_file', 'w'), indent=2)"
+    else
+        sed -i.bak "/\"$key\"[[:space:]]*:/d" "$1" 2>/dev/null || true
+        sed -i.bak "s/^{/{\n  \"$key\": \"$val\",/" "$1" 2>/dev/null || true
+        rm -f "$1.bak"
+    fi
+}
+
+json_remove_key() {
+    local json_file
+    json_file=$(to_win_path "$1")
+    local key="$2"
+    if command -v jq &>/dev/null; then
+        local tmp="${json_file}.tmp.$$"
+        jq "del(.[\"$key\"])" "$json_file" > "$tmp" && mv "$tmp" "$json_file"
+    elif command -v python3 &>/dev/null; then
+        python3 -c "import sys, json;
+try: d=json.load(open('$json_file'))
+except: d={}
+d.pop('$key', None)
+json.dump(d, open('$json_file', 'w'), indent=2)"
+    else
+        sed -i.bak "/\"$key\"[[:space:]]*:/d" "$1" 2>/dev/null || true
+        rm -f "$1.bak"
+    fi
+}
+
+# --- Version & Alias Resolution ---
+resolve_alias() {
+    local input="$1"
+    if [[ ! -f "$PVM_ALIASES_FILE" ]]; then echo "$input"; return; fi
+    local target
+    target=$(json_get_key "$PVM_ALIASES_FILE" "$input")
+    if [[ -n "$target" && "$target" != "null" ]]; then
+        echo "$target"
+    else
+        echo "$input"
+    fi
+}
+
+get_active_version() {
+    if [[ ! -e "$PVM_CURRENT_DIR" && ! -L "$PVM_CURRENT_DIR" ]]; then echo ""; return; fi
+    local link_target
+    link_target=$(readlink "$PVM_CURRENT_DIR" 2>/dev/null || true)
+    if [[ -n "$link_target" ]]; then
+        basename "$link_target"
+        return
+    fi
+    if [[ $(detect_os) == "windows" ]]; then
+        local win_parent
+        win_parent=$(cygpath -w "$PVM_HOME" 2>/dev/null || echo "$PVM_HOME")
+        local target
+        target=$(cmd //c "dir /al \"$win_parent\"" 2>/dev/null | grep -i "current \[" | sed 's/.*\[\(.*\)\]/\1/' | tr -d '\r')
+        if [[ -n "$target" ]]; then
+            basename "$target"
+            return
+        fi
+    fi
+    echo ""
+}
+
+# --- Table Rendering Utility ---
+render_table_header() {
+    local title="$1"
+    printf "${C_CYAN}┌─────────────────────────────────────────────────────────────────────────────┐${C_RESET}\n"
+    printf "${C_CYAN}│ ${C_BOLD}%-75s${C_RESET}${C_CYAN} │${C_RESET}\n" "$title"
+    printf "${C_CYAN}├────────┬─────────────────┬──────┬───────────────┬───────────────────────────┤${C_RESET}\n"
+    printf "${C_CYAN}│ ${C_BOLD}%-6s${C_RESET}${C_CYAN} │ ${C_BOLD}%-15s${C_RESET}${C_CYAN} │ ${C_BOLD}%-4s${C_RESET}${C_CYAN} │ ${C_BOLD}%-13s${C_RESET}${C_CYAN} │ ${C_BOLD}%-25s${C_RESET}${C_CYAN} │${C_RESET}\n" "Active" "Version" "Arch" "Thread Safety" "Path"
+    printf "${C_CYAN}├────────┼─────────────────┼──────┼───────────────┼───────────────────────────┤${C_RESET}\n"
+}
+
+render_table_row() {
+    local active="$1" ver="$2" arch="$3" ts="$4" path="$5"
+    local act_str="      "
+    if [[ "$active" == "true" || "$active" == "*" ]]; then
+        act_str="${C_GREEN}  *   ${C_RESET}"
+    fi
+    # truncate path if needed
+    if [[ ${#path} -gt 25 ]]; then
+        path="...${path: -22}"
+    fi
+    printf "${C_CYAN}│${C_RESET} %b ${C_CYAN}│${C_RESET} %-15s ${C_CYAN}│${C_RESET} %-4s ${C_CYAN}│${C_RESET} %-13s ${C_CYAN}│${C_RESET} %-25s ${C_CYAN}│${C_RESET}\n" "$act_str" "$ver" "$arch" "$ts" "$path"
+}
+
+render_table_footer() {
+    printf "${C_CYAN}└────────┴─────────────────┴──────┴───────────────┴───────────────────────────┘${C_RESET}\n"
+}
+
+# ==============================================================================
+# Command: list / ls
+# ==============================================================================
+cmd_list() {
+    local remote=false
+    if [[ "$1" == "--remote" || "$1" == "-r" ]]; then remote=true; fi
+
+    ensure_directories
+    local active_ver
+    active_ver=$(get_active_version)
+
+    if [[ "$remote" == "true" ]]; then
+        print_info "Fetching available PHP builds from official windows.php.net mirrors..."
+        local tmp_json="${TMPDIR:-/tmp}/pvm_releases_$$.json"
+        if ! curl -sSL --fail "$RELEASES_JSON_URL" -o "$tmp_json"; then
+            print_error "Failed to fetch release catalog from windows.php.net."
+            return 1
+        fi
+
+        render_table_header "Available Remote PHP Versions (windows.php.net)"
+        local win_tmp_json
+        win_tmp_json=$(to_win_path "$tmp_json")
+        if command -v jq &>/dev/null; then
+            jq -r 'to_entries[] | .value | select(type == "object" and .version != null) | .version as $v | to_entries[] | select(.key | test("^ts-|^nts-")) | .key as $k | select($k | test("-x64$")) | "\($v)|\($k)"' "$win_tmp_json" | sort -V -r | head -n 30 | while IFS='|' read -r ver key; do
+                local ts="NTS"
+                if [[ "$key" == ts-* ]]; then ts="TS"; fi
+                local is_active="false"
+                if [[ "$ver" == "$active_ver" ]]; then is_active="true"; fi
+                render_table_row "$is_active" "$ver" "x64" "$ts" "windows.php.net"
+            done
+        elif command -v python3 &>/dev/null; then
+            python3 -c "
+import json, sys
+data = json.load(open('$win_tmp_json'))
+versions = []
+for k, v in data.items():
+    if isinstance(v, dict) and 'version' in v:
+        ver = v['version']
+        for fk in v.keys():
+            if fk.startswith(('ts-', 'nts-')) and fk.endswith('-x64'):
+                ts = 'TS' if fk.startswith('ts-') else 'NTS'
+                versions.append((ver, ts))
+versions.sort(key=lambda x: [int(p) if p.isdigit() else p for p in x[0].split('.')], reverse=True)
+for ver, ts in versions[:30]:
+    active = 'true' if ver == '$active_ver' else 'false'
+    print(f'{active}|{ver}|x64|{ts}|windows.php.net')
+" | while IFS='|' read -r is_active ver arch ts path; do
+                render_table_row "$is_active" "$ver" "$arch" "$ts" "$path"
+            done
+        else
+            print_warn "jq or python3 required for formatted remote display. Showing RAW versions list:"
+            grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$tmp_json" | sed 's/.*:[[:space:]]*"\([^"]*\)"/\1/' | sort -V -r | head -n 25
+        fi
+        rm -f "$tmp_json"
+        render_table_footer
+        return 0
+    fi
+
+    # Local List
+    local count=0
+    for dir in "$PVM_VERSIONS_DIR"/*; do
+        if [[ -d "$dir" && (-f "$dir/php.exe" || -f "$dir/php") ]]; then
+            if [[ $count -eq 0 ]]; then
+                render_table_header "Installed PHP Versions ($PVM_VERSIONS_DIR)"
+            fi
+            count=$((count + 1))
+            local ver
+            ver=$(basename "$dir")
+            local is_active="false"
+            if [[ "$ver" == "$active_ver" ]]; then is_active="true"; fi
+            local ts="TS (Default)"
+            if [[ "$ver" == *-nts* ]]; then ts="NTS"; fi
+            render_table_row "$is_active" "$ver" "$(detect_arch)" "$ts" "$dir"
+        fi
+    done
+
+    if [[ $count -eq 0 ]]; then
+        print_warn "No PHP versions installed yet. Run '${C_BOLD}pvm list --remote${C_RESET}${C_YELLOW}' to view remote releases, or '${C_BOLD}pvm install <version>${C_RESET}${C_YELLOW}' to install."
+    else
+        render_table_footer
+    fi
+}
+
+# ==============================================================================
+# Command: current
+# ==============================================================================
+cmd_current() {
+    local active_ver
+    active_ver=$(get_active_version)
+    if [[ -z "$active_ver" || (! -e "$PVM_CURRENT_DIR/php.exe" && ! -e "$PVM_CURRENT_DIR/php") ]]; then
+        print_warn "No active PHP version is set across PVM."
+        print_info "Run '${C_BOLD}pvm use <version>${C_RESET}${C_CYAN}' to switch or set the active system PHP runtime."
+        return 0
+    fi
+
+    local exe="$PVM_CURRENT_DIR/php"
+    if [[ -f "$PVM_CURRENT_DIR/php.exe" ]]; then exe="$PVM_CURRENT_DIR/php.exe"; fi
+
+    printf "\n${C_BOLD}Active PVM Runtime Status:${C_RESET}\n"
+    printf "  • ${C_CYAN}Version      :${C_RESET} %s\n" "$active_ver"
+    printf "  • ${C_CYAN}Junction Link:${C_RESET} %s\n" "$PVM_CURRENT_DIR"
+    printf "  • ${C_CYAN}Binary Path  :${C_RESET} %s\n" "$exe"
+    printf "\n${C_BOLD}PHP CLI Output ($exe -v):${C_RESET}\n"
+    "$exe" -v 2>&1 | sed 's/^/  /' || true
+    printf "\n"
+}
+
+# ==============================================================================
+# Command: use
+# ==============================================================================
+cmd_use() {
+    local spec="$1"
+    if [[ -z "$spec" ]]; then
+        print_error "Please specify a PHP version or alias to use (e.g., 'pvm use 8.4')."
+        return 1
+    fi
+
+    ensure_directories
+    local target_ver
+    target_ver=$(resolve_alias "$spec")
+
+    # Check for exact match or branch prefix
+    local matched_dir="" matched_ver=""
+    if [[ -d "$PVM_VERSIONS_DIR/$target_ver" ]]; then
+        matched_dir="$PVM_VERSIONS_DIR/$target_ver"
+        matched_ver="$target_ver"
+    else
+        # Find highest matching prefix
+        for dir in $(ls -r "$PVM_VERSIONS_DIR" 2>/dev/null || true); do
+            local vname=$(basename "$dir")
+            if [[ "$vname" == "$target_ver"* ]]; then
+                matched_dir="$PVM_VERSIONS_DIR/$dir"
+                matched_ver="$vname"
+                break
+            fi
+        done
+    fi
+
+    if [[ -z "$matched_dir" || (! -f "$matched_dir/php.exe" && ! -f "$matched_dir/php") ]]; then
+        print_error "PHP version matching '$spec' ($target_ver) is not installed in $PVM_VERSIONS_DIR."
+        print_info "Run '${C_BOLD}pvm install $spec${C_RESET}${C_CYAN}' first to install it."
+        return 1
+    fi
+
+    print_info "Switching active PHP version to ${C_BOLD}$matched_ver${C_RESET}${C_CYAN}..."
+
+    if [[ $(detect_os) == "windows" ]]; then
+        if command -v cygpath &>/dev/null; then
+            local win_current win_target
+            win_current=$(cygpath -w "$PVM_CURRENT_DIR")
+            win_target=$(cygpath -w "$matched_dir")
+            cmd //c "rmdir \"$win_current\" 2>nul" || true
+            cmd //c "del /f /q \"$win_current\" 2>nul" || true
+            if ! cmd //c "mklink /J \"$win_current\" \"$win_target\"" >/dev/null 2>&1; then
+                # Fallback to POSIX symlink inside MSYS if mklink fails
+                rm -rf "$PVM_CURRENT_DIR"
+                ln -sfn "$matched_dir" "$PVM_CURRENT_DIR"
+            fi
+        else
+            rm -rf "$PVM_CURRENT_DIR"
+            ln -sfn "$matched_dir" "$PVM_CURRENT_DIR"
+        fi
+    else
+        rm -rf "$PVM_CURRENT_DIR"
+        ln -sfn "$matched_dir" "$PVM_CURRENT_DIR"
+    fi
+
+    # Broadcast environment or update profile notes
+    export PATH="$PVM_CURRENT_DIR:$PATH"
+    print_success "Successfully switched to PHP ${C_BOLD}$matched_ver${C_RESET}!"
+}
+
+# ==============================================================================
+# Command: install
+# ==============================================================================
+cmd_install() {
+    local spec="$1" force="false"
+    if [[ "$spec" == "--force" || "$spec" == "-f" ]]; then spec="$2"; force="true"; fi
+    if [[ "$2" == "--force" || "$2" == "-f" ]]; then force="true"; fi
+
+    if [[ -z "$spec" ]]; then
+        print_error "Please specify a PHP version to install (e.g., 'pvm install 8.4')."
+        return 1
+    fi
+
+    ensure_directories
+    local target_ver
+    target_ver=$(resolve_alias "$spec")
+
+    print_info "Resolving remote download catalog for PHP '$target_ver'..."
+    local tmp_json="${TMPDIR:-/tmp}/pvm_releases_$$.json"
+    if ! curl -sSL --fail "$RELEASES_JSON_URL" -o "$tmp_json"; then
+        print_error "Failed to fetch release catalog from windows.php.net."
+        return 1
+    fi
+
+    local download_path="" sha256="" resolved_ver=""
+    local win_tmp_json
+    win_tmp_json=$(to_win_path "$tmp_json")
+    if command -v jq &>/dev/null; then
+        local entry
+        entry=$(jq -r --arg spec "$target_ver" '
+            to_entries[] | .value | select(type == "object" and .version != null) |
+            select(.version | startswith($spec)) |
+            .version as $v | to_entries[] | select(.key | test("^ts-.*-x64$")) |
+            "\($v)|\(.value.zip.path)|\(.value.zip.sha256 // "")"' "$win_tmp_json" | sort -V -r | head -n 1)
+        if [[ -n "$entry" ]]; then
+            resolved_ver=$(echo "$entry" | cut -d'|' -f1)
+            download_path=$(echo "$entry" | cut -d'|' -f2)
+            sha256=$(echo "$entry" | cut -d'|' -f3)
+        fi
+    elif command -v python3 &>/dev/null; then
+        local entry
+        entry=$(python3 -c "
+import json, sys
+data = json.load(open('$win_tmp_json'))
+matches = []
+for k, v in data.items():
+    if isinstance(v, dict) and 'version' in v and v['version'].startswith('$target_ver'):
+        ver = v['version']
+        for fk, fv in v.items():
+            if fk.startswith('ts-') and fk.endswith('-x64') and isinstance(fv, dict) and 'zip' in fv:
+                matches.append((ver, fv['zip'].get('path', ''), fv['zip'].get('sha256', '')))
+matches.sort(key=lambda x: [int(p) if p.isdigit() else p for p in x[0].split('.')], reverse=True)
+if matches:
+    print(f'{matches[0][0]}|{matches[0][1]}|{matches[0][2]}')
+")
+        if [[ -n "$entry" ]]; then
+            resolved_ver=$(echo "$entry" | cut -d'|' -f1)
+            download_path=$(echo "$entry" | cut -d'|' -f2)
+            sha256=$(echo "$entry" | cut -d'|' -f3)
+        fi
+    fi
+    rm -f "$tmp_json"
+
+    if [[ -z "$resolved_ver" || -z "$download_path" ]]; then
+        print_error "Could not find an official Windows x64 Thread Safe build for PHP '$target_ver'."
+        return 1
+    fi
+
+    local target_dir="$PVM_VERSIONS_DIR/$resolved_ver"
+    if [[ -d "$target_dir" && "$force" != "true" ]]; then
+        print_warn "PHP $resolved_ver is already installed at $target_dir."
+        print_info "Use '${C_BOLD}pvm install $resolved_ver --force${C_RESET}${C_CYAN}' to reinstall."
+        return 0
+    fi
+
+    local full_url="${BASE_DOWNLOAD_URL}${download_path}"
+    local archive_file="${TMPDIR:-/tmp}/php_${resolved_ver}_$$.zip"
+
+    print_info "Downloading PHP ${C_BOLD}$resolved_ver${C_RESET}${C_CYAN} from $full_url..."
+    curl -L --progress-bar "$full_url" -o "$archive_file"
+
+    if [[ -n "$sha256" ]]; then
+        print_info "Verifying SHA256 cryptographic checksum..."
+        local actual_sha=""
+        if command -v sha256sum &>/dev/null; then
+            actual_sha=$(sha256sum "$archive_file" | awk '{print $1}')
+        elif command -v shasum &>/dev/null; then
+            actual_sha=$(shasum -a 256 "$archive_file" | awk '{print $1}')
+        fi
+        if [[ -n "$actual_sha" && "$actual_sha" != "$sha256" ]]; then
+            rm -f "$archive_file"
+            print_error "SHA256 checksum mismatch! Expected: $sha256, Actual: $actual_sha"
+            return 1
+        fi
+        print_success "Checksum verified ($sha256)"
+    fi
+
+    print_info "Extracting binaries into $target_dir..."
+    rm -rf "$target_dir" && mkdir -p "$target_dir"
+    if command -v unzip &>/dev/null; then
+        unzip -q -o "$archive_file" -d "$target_dir"
+    elif command -v python3 &>/dev/null; then
+        python3 -m zipfile -e "$archive_file" "$target_dir"
+    else
+        print_error "No extraction tool ('unzip' or 'python3') found."
+        rm -f "$archive_file"
+        return 1
+    fi
+    rm -f "$archive_file"
+
+    # Configure default php.ini
+    if [[ ! -f "$target_dir/php.ini" ]]; then
+        if [[ -f "$target_dir/php.ini-development" ]]; then
+            cp "$target_dir/php.ini-development" "$target_dir/php.ini"
+        elif [[ -f "$target_dir/php.ini-production" ]]; then
+            cp "$target_dir/php.ini-production" "$target_dir/php.ini"
+        fi
+    fi
+
+    print_success "Successfully installed PHP ${C_BOLD}$resolved_ver${C_RESET}!"
+    print_info "Run '${C_BOLD}pvm use $resolved_ver${C_RESET}${C_CYAN}' to switch to this version."
+}
+
+# ==============================================================================
+# Command: uninstall
+# ==============================================================================
+cmd_uninstall() {
+    local spec="$1"
+    if [[ -z "$spec" ]]; then
+        print_error "Please specify a PHP version to uninstall (e.g., 'pvm uninstall 8.3.3')."
+        return 1
+    fi
+
+    local target_ver
+    target_ver=$(resolve_alias "$spec")
+    local target_dir="$PVM_VERSIONS_DIR/$target_ver"
+
+    if [[ ! -d "$target_dir" ]]; then
+        print_error "PHP version '$target_ver' is not installed in $PVM_VERSIONS_DIR."
+        return 1
+    fi
+
+    local active_ver
+    active_ver=$(get_active_version)
+    if [[ "$active_ver" == "$target_ver" ]]; then
+        print_error "Cannot uninstall PHP $target_ver because it is currently the active runtime!"
+        print_info "Switch to another version with '${C_BOLD}pvm use <version>${C_RESET}${C_CYAN}' first."
+        return 1
+    fi
+
+    print_info "Removing $target_dir..."
+    rm -rf "$target_dir"
+    print_success "PHP $target_ver uninstalled cleanly."
+}
+
+# ==============================================================================
+# Command: env
+# ==============================================================================
+cmd_env() {
+    local mode="$1"
+    if [[ -z "$mode" || "$mode" == "--check" ]]; then
+        printf "\n${C_BOLD}PVM PATH Environment Audit:${C_RESET}\n"
+        printf "  • ${C_CYAN}PVM Junction Path:${C_RESET} %s\n" "$PVM_CURRENT_DIR"
+        printf "  • ${C_CYAN}PATH Hygiene     :${C_RESET} "
+        if [[ ":$PATH:" == *":$PVM_CURRENT_DIR:"* ]]; then
+            printf "${C_GREEN}HEALTHY (PVM current junction is present in session PATH)${C_RESET}\n"
+        else
+            printf "${C_YELLOW}WARNING (PVM current junction is missing from session PATH)${C_RESET}\n"
+        fi
+
+        local php_location=""
+        if command -v php &>/dev/null; then
+            php_location=$(command -v php)
+            printf "  • ${C_CYAN}Active php binary:${C_RESET} %s\n" "$php_location"
+        else
+            printf "  • ${C_CYAN}Active php binary:${C_RESET} ${C_RED}Not found in PATH${C_RESET}\n"
+        fi
+        printf "\n"
+    elif [[ "$mode" == "--clean" ]]; then
+        print_info "Cleaning duplicate entries from session PATH..."
+        local clean_path=$(echo "$PATH" | tr ':' '\n' | awk '!seen[$0]++' | paste -sd ':')
+        export PATH="$clean_path"
+        print_success "Session PATH cleaned!"
+    elif [[ "$mode" == "--ps1" ]]; then
+        echo '$env:PATH = "'"$PVM_CURRENT_DIR"';'"$PVM_BIN_DIR"';" + $env:PATH'
+    elif [[ "$mode" == "--cmd" ]]; then
+        echo 'set PATH='"$PVM_CURRENT_DIR"';'"$PVM_BIN_DIR"';%PATH%'
+    else
+        print_error "Unknown env option: $mode (Use --check, --clean, --ps1, --cmd)"
+        return 1
+    fi
+}
+
+# ==============================================================================
+# Command: ini
+# ==============================================================================
+cmd_ini() {
+    local sub="$1" arg1="$2" arg2="$3"
+    local active_ver
+    active_ver=$(get_active_version)
+    if [[ -z "$active_ver" ]]; then
+        print_error "No active PHP version is set. Run 'pvm use <version>' first."
+        return 1
+    fi
+
+    local ini_path="$PVM_VERSIONS_DIR/$active_ver/php.ini"
+    if [[ ! -f "$ini_path" ]]; then
+        print_error "php.ini file not found for active version ($ini_path)."
+        return 1
+    fi
+
+    case "$sub" in
+        ls|list)
+            render_table_header "PHP Extensions ($active_ver -> php.ini)"
+            grep -E '^[;[:space:]]*extension[[:space:]]*=' "$ini_path" | while read -r line; do
+                local ext status
+                ext=$(echo "$line" | sed 's/^[;[:space:]]*extension[[:space:]]*=[[:space:]]*\([^;[:space:]]*\).*/\1/')
+                if [[ "$line" == *";"* && ! "$line" =~ ^[[:space:]]*extension ]]; then
+                    status="${C_YELLOW}DISABLED${C_RESET}"
+                else
+                    status="${C_GREEN}ENABLED ${C_RESET}"
+                fi
+                printf "${C_CYAN}│${C_RESET} %-14b ${C_CYAN}│${C_RESET} %-25s ${C_CYAN}│${C_RESET} %-4s ${C_CYAN}│${C_RESET} %-13s ${C_CYAN}│${C_RESET} %-25s ${C_CYAN}│${C_RESET}\n" "$status" "$ext" "DLL" "Zend/Standard" "php.ini"
+            done
+            render_table_footer
+            ;;
+        enable)
+            if [[ -z "$arg1" ]]; then print_error "Specify extension name (e.g. 'pvm ini enable curl')"; return 1; fi
+            if grep -qi "^[;[:space:]]*extension[[:space:]]*=[[:space:]]*${arg1}" "$ini_path"; then
+                sed -i.bak "s/^[;[:space:]]*\(extension[[:space:]]*=[[:space:]]*${arg1}\)/\1/I" "$ini_path" && rm -f "${ini_path}.bak"
+            else
+                echo "extension=${arg1}" >> "$ini_path"
+            fi
+            print_success "Enabled extension '${C_BOLD}${arg1}${C_RESET}' in $ini_path"
+            ;;
+        disable)
+            if [[ -z "$arg1" ]]; then print_error "Specify extension name (e.g. 'pvm ini disable xdebug')"; return 1; fi
+            sed -i.bak "s/^\([[:space:]]*extension[[:space:]]*=[[:space:]]*${arg1}\)/;\1/I" "$ini_path" && rm -f "${ini_path}.bak"
+            print_success "Disabled extension '${C_BOLD}${arg1}${C_RESET}' in $ini_path"
+            ;;
+        get)
+            if [[ -z "$arg1" ]]; then print_error "Specify directive name (e.g. 'pvm ini get memory_limit')"; return 1; fi
+            local val
+            val=$(grep -i "^[[:space:]]*${arg1}[[:space:]]*=" "$ini_path" | head -n 1 | cut -d'=' -f2 | tr -d ' "')
+            echo "${arg1} = ${val:-Not Set}"
+            ;;
+        set)
+            if [[ -z "$arg1" || -z "$arg2" ]]; then print_error "Specify directive and value (e.g. 'pvm ini set memory_limit 1024M')"; return 1; fi
+            if grep -qi "^[;[:space:]]*${arg1}[[:space:]]*=" "$ini_path"; then
+                sed -i.bak "s/^[;[:space:]]*${arg1}[[:space:]]*=.*/${arg1} = ${arg2}/I" "$ini_path" && rm -f "${ini_path}.bak"
+            else
+                echo "${arg1} = ${arg2}" >> "$ini_path"
+            fi
+            print_success "Set directive ${C_BOLD}${arg1} = ${arg2}${C_RESET} in $ini_path"
+            ;;
+        open)
+            print_info "Launching editor for $ini_path..."
+            if [[ -n "$EDITOR" ]]; then
+                "$EDITOR" "$ini_path"
+            elif command -v notepad.exe &>/dev/null; then
+                notepad.exe "$ini_path"
+            else
+                vi "$ini_path"
+            fi
+            ;;
+        *)
+            print_error "Unknown ini option: $sub (Use ls, enable, disable, get, set, open)"
+            return 1
+            ;;
+    esac
+}
+
+# ==============================================================================
+# Command: alias
+# ==============================================================================
+cmd_alias() {
+    local name="$1" target="$2"
+    ensure_directories
+    local win_aliases_file
+    win_aliases_file=$(to_win_path "$PVM_ALIASES_FILE")
+    if [[ -z "$name" ]]; then
+        render_table_header "Configured PVM Version Aliases ($PVM_ALIASES_FILE)"
+        if command -v jq &>/dev/null; then
+            jq -r 'to_entries[] | "\(.key)|\(.value)"' "$win_aliases_file" | while IFS='|' read -r k v; do
+                render_table_row "Alias" "$k" "->  " "$v" "$PVM_ALIASES_FILE"
+            done
+        elif command -v python3 &>/dev/null; then
+            python3 -c "import json;
+try: d=json.load(open('$win_aliases_file'))
+except: d={}
+[print(f'{k}|{v}') for k, v in d.items()]" | while IFS='|' read -r k v; do
+                render_table_row "Alias" "$k" "->  " "$v" "$PVM_ALIASES_FILE"
+            done
+        fi
+        render_table_footer
+        return 0
+    fi
+
+    if [[ "$name" == "--remove" || "$name" == "-r" ]]; then
+        name="$target"
+        target="--remove"
+    fi
+
+    if [[ "$target" == "--remove" || "$target" == "-r" ]]; then
+        json_remove_key "$PVM_ALIASES_FILE" "$name"
+        print_success "Removed alias '$name'."
+        return 0
+    fi
+
+    if [[ -z "$target" ]]; then
+        local resolved
+        resolved=$(resolve_alias "$name")
+        echo "$name -> $resolved"
+        return 0
+    fi
+
+    json_set_key "$PVM_ALIASES_FILE" "$name" "$target"
+    print_success "Created alias '${C_BOLD}$name${C_RESET}' -> '${C_BOLD}$target${C_RESET}'"
+}
+
+# ==============================================================================
+# Command: doctor
+# ==============================================================================
+cmd_doctor() {
+    local fix="false"
+    if [[ "$1" == "--fix" || "$1" == "-f" ]]; then fix="true"; fi
+
+    printf "\n${C_BOLD}Running PVM Doctor System Diagnostics & Health Audit...${C_RESET}\n\n"
+    local errors=0
+
+    # Check 1: PVM Home Directory Structure
+    if [[ -d "$PVM_HOME" && -d "$PVM_VERSIONS_DIR" && -d "$PVM_BIN_DIR" ]]; then
+        print_success "Check 1: PVM Directory Structure is intact ($PVM_HOME)"
+    else
+        print_error "Check 1: Missing core PVM directories."
+        errors=$((errors + 1))
+        if [[ "$fix" == "true" ]]; then
+            ensure_directories
+            print_success "Repaired PVM directories!"
+            errors=$((errors - 1))
+        fi
+    fi
+
+    # Check 2: Active Junction / Symlink Validity
+    if [[ -e "$PVM_CURRENT_DIR/php.exe" || -e "$PVM_CURRENT_DIR/php" ]]; then
+        print_success "Check 2: Active junction link is valid -> $(get_active_version)"
+    else
+        print_warn "Check 2: No active PHP runtime is currently linked in $PVM_CURRENT_DIR"
+    fi
+
+    # Check 3: Session PATH Hygiene
+    if [[ ":$PATH:" == *":$PVM_CURRENT_DIR:"* ]]; then
+        print_success "Check 3: PVM current junction ($PVM_CURRENT_DIR) is properly inside session PATH"
+    else
+        print_warn "Check 3: PVM current junction is not in active session PATH"
+    fi
+
+    # Check 4: External PHP Shadowing Check
+    local active_php=""
+    if command -v php &>/dev/null; then
+        active_php=$(command -v php)
+        if [[ "$active_php" == *"$PVM_HOME"* || "$active_php" == *".pvm"* ]]; then
+            print_success "Check 4: `php` command correctly resolves to PVM ($active_php)"
+        else
+            print_warn "Check 4: External PHP installation shadows PVM ($active_php)"
+        fi
+    fi
+
+    printf "\n"
+    if [[ $errors -eq 0 ]]; then
+        print_success "PVM Doctor audit completed with zero fatal errors!"
+    else
+        print_error "PVM Doctor audit found $errors error(s)."
+    fi
+}
+
+# ==============================================================================
+# Command: self-update
+# ==============================================================================
+cmd_self_update() {
+    local check_only="false"
+    if [[ "$1" == "--check" || "$1" == "-c" ]]; then check_only="true"; fi
+
+    print_info "Checking GitHub Releases API for latest PVM Shell update..."
+    local tmp_json="${TMPDIR:-/tmp}/pvm_release_$$.json"
+    if ! curl -sSL --fail "$GITHUB_API_LATEST" -o "$tmp_json"; then
+        print_error "Failed to check GitHub releases API."
+        return 1
+    fi
+
+    local latest_tag=""
+    if command -v jq &>/dev/null; then
+        latest_tag=$(jq -r '.tag_name // empty' "$tmp_json" | sed 's/^v//I')
+    elif command -v python3 &>/dev/null; then
+        latest_tag=$(python3 -c "import json; print(json.load(open('$tmp_json')).get('tag_name', '').lstrip('vV'))")
+    fi
+    rm -f "$tmp_json"
+
+    if [[ -z "$latest_tag" ]]; then
+        print_warn "Could not parse tag from GitHub. Current version is $PVM_VERSION."
+        return 0
+    fi
+
+    print_info "Current Version: ${C_BOLD}$PVM_VERSION${C_RESET} | Latest Release: ${C_BOLD}$latest_tag${C_RESET}"
+    if [[ "$check_only" == "true" ]]; then
+        return 0
+    fi
+
+    print_info "Downloading latest pvm script directly from repository main branch..."
+    local tmp_script="${TMPDIR:-/tmp}/pvm_latest_$$"
+    curl -sSL "https://raw.githubusercontent.com/hasanhawary/phpvm/main/shell/pvm" -o "$tmp_script"
+    chmod +x "$tmp_script"
+    mkdir -p "$PVM_BIN_DIR"
+    mv -f "$tmp_script" "$PVM_BIN_DIR/pvm"
+    print_success "PVM self-updated successfully!"
+}
+
+# ==============================================================================
+# Command: self-uninstall
+# ==============================================================================
+cmd_self_uninstall() {
+    if [[ "$1" != "-y" && "$1" != "--yes" ]]; then
+        printf "${C_YELLOW}⚠ WARNING: This will completely delete %s and all installed PHP versions!${C_RESET}\n" "$PVM_HOME"
+        read -p "Are you sure you want to proceed? [y/N] " confirm
+        if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+            print_info "Uninstallation cancelled."
+            return 0
+        fi
+    fi
+
+    print_info "Removing $PVM_HOME directory..."
+    rm -rf "$PVM_HOME"
+
+    print_info "Cleaning shell profiles (~/.bashrc, ~/.bash_profile, ~/.zshrc)..."
+    for profile in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.profile"; do
+        if [[ -f "$profile" ]]; then
+            sed -i.bak '/\.pvm/d' "$profile" 2>/dev/null || true
+            rm -f "${profile}.bak"
+        fi
+    done
+
+    print_success "PVM has been completely uninstalled from your machine."
+}
+
+# ==============================================================================
+# Command: completion
+# ==============================================================================
+cmd_completion() {
+    local shell_type="$1"
+    case "$shell_type" in
+        bash)
+            echo 'cat << "EOF"
+_pvm_completion() {
+    local cur prev
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    if [[ ${COMP_CWORD} -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "list ls current use install uninstall env ini alias doctor self-update self-uninstall completion --help --version" -- "$cur") )
+        return 0
+    fi
+}
+complete -F _pvm_completion pvm
+EOF'
+            ;;
+        zsh)
+            echo '# zsh completion for pvm'
+            echo 'compdef _pvm pvm'
+            ;;
+        powershell)
+            echo 'Register-ArgumentCompleter -CommandName pvm -ScriptBlock { param($cmd, $arg, $wordToComplete) @("list","current","use","install","uninstall","env","ini","alias","doctor","self-update","self-uninstall") | Where-Object { $_ -like "$wordToComplete*" } }'
+            ;;
+        *)
+            print_error "Specify shell type: bash, zsh, or powershell"
+            ;;
+    esac
+}
+
+# ==============================================================================
+# Main Router
+# ==============================================================================
+show_help() {
+    printf "${C_BOLD}PVM — PHP Version Manager (Pure Shell Edition v%s)${C_RESET}\n\n" "$PVM_VERSION"
+    printf "Usage: ${C_BOLD}pvm <command> [arguments]${C_RESET}\n\n"
+    printf "${C_BOLD}Commands:${C_RESET}\n"
+    printf "  ${C_CYAN}list, ls [--remote]${C_RESET}     List local installed PHP versions or fetch remote mirror catalog\n"
+    printf "  ${C_CYAN}current${C_RESET}                 Display the currently active PHP runtime status & CLI output\n"
+    printf "  ${C_CYAN}use <version>${C_RESET}           Switch active PHP version via atomic directory junction/symlink\n"
+    printf "  ${C_CYAN}install <version> [-f]${C_RESET}  Download, verify SHA256, and install a PHP version from official mirror\n"
+    printf "  ${C_CYAN}uninstall <version>${C_RESET}     Remove an installed PHP version from ~/.pvm/versions\n"
+    printf "  ${C_CYAN}env [--check|--clean]${C_RESET}   Audit PATH hygiene or clean duplicate PATH entries\n"
+    printf "  ${C_CYAN}ini <subcommand>${C_RESET}        Inspect or modify active php.ini (ls, enable, disable, get, set, open)\n"
+    printf "  ${C_CYAN}alias [name] [target]${C_RESET}   Create, list, or remove (--remove) semantic version aliases\n"
+    printf "  ${C_CYAN}doctor [--fix]${C_RESET}          Run system health audits and automatically remediate PATH issues\n"
+    printf "  ${C_CYAN}self-update [--check]${C_RESET}   Check or update the pvm script directly from GitHub Releases\n"
+    printf "  ${C_CYAN}self-uninstall [-y]${C_RESET}     Completely uninstall PVM and remove all local PHP installations\n"
+    printf "  ${C_CYAN}completion <shell>${C_RESET}      Generate tab autocompletion script (bash, zsh, powershell)\n\n"
+}
+
+case "$1" in
+    list|ls)        shift; cmd_list "$@" ;;
+    current)        shift; cmd_current "$@" ;;
+    use)            shift; cmd_use "$@" ;;
+    install|i)      shift; cmd_install "$@" ;;
+    uninstall|rm)   shift; cmd_uninstall "$@" ;;
+    env)            shift; cmd_env "$@" ;;
+    ini)            shift; cmd_ini "$@" ;;
+    alias)          shift; cmd_alias "$@" ;;
+    doctor)         shift; cmd_doctor "$@" ;;
+    self-update|update) shift; cmd_self_update "$@" ;;
+    self-uninstall) shift; cmd_self_uninstall "$@" ;;
+    completion)     shift; cmd_completion "$@" ;;
+    --help|-h|help|"") show_help ;;
+    --version|-v)   echo "pvm version $PVM_VERSION" ;;
+    *) print_error "Unknown command: $1. Run 'pvm --help' for usage." ; exit 1 ;;
+esac
