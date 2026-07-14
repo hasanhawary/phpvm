@@ -7,6 +7,7 @@ on:
 
 jobs:
   release:
+    name: Build & Publish Pure Shell Release
     runs-on: windows-latest
     permissions:
       contents: write
@@ -15,48 +16,27 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Setup .NET 8 SDK
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
+    - name: Run Windows Automated Test Suite
+      run: powershell -ExecutionPolicy Bypass -File .\test.ps1
 
-    - name: Run Full Test Suite
-      run: dotnet test pvm.sln -c Release
-
-    - name: Publish Standalone Self-Contained Executables (Windows win-x64)
+    - name: Package Universal Pure-Shell Archives
       run: |
-        dotnet publish src/Pvm.Cli/Pvm.Cli.csproj -c Release -r win-x64 -o ./publish/win-x64
-        dotnet publish src/Pvm.Setup/Pvm.Setup.csproj -c Release -r win-x64 -o ./publish/win-x64
-
-    - name: Publish Standalone Self-Contained Executables (Linux x64 & arm64)
-      run: |
-        dotnet publish src/Pvm.Cli/Pvm.Cli.csproj -c Release -r linux-x64 -o ./publish/linux-x64
-        dotnet publish src/Pvm.Cli/Pvm.Cli.csproj -c Release -r linux-arm64 -o ./publish/linux-arm64
-
-    - name: Publish Standalone Self-Contained Executables (macOS osx-x64 & osx-arm64)
-      run: |
-        dotnet publish src/Pvm.Cli/Pvm.Cli.csproj -c Release -r osx-x64 -o ./publish/osx-x64
-        dotnet publish src/Pvm.Cli/Pvm.Cli.csproj -c Release -r osx-arm64 -o ./publish/osx-arm64
-
-    - name: Package Release Archives
-      run: |
-        Compress-Archive -Path ./publish/win-x64/pvm.exe, ./publish/win-x64/pvm-setup.exe, ./README.md, ./LICENSE -DestinationPath ./pvm-win-x64.zip
-        Copy-Item ./publish/win-x64/pvm-setup.exe ./pvm-setup.exe
-        tar -czvf pvm-linux-x64.tar.gz -C ./publish/linux-x64 pvm
-        tar -czvf pvm-linux-arm64.tar.gz -C ./publish/linux-arm64 pvm
-        tar -czvf pvm-osx-x64.tar.gz -C ./publish/osx-x64 pvm
-        tar -czvf pvm-osx-arm64.tar.gz -C ./publish/osx-arm64 pvm
+        New-Item -ItemType Directory -Path ./release_pkg -Force | Out-Null
+        Copy-Item pvm, pvm.ps1, pvm.cmd, install.sh, install.ps1, uninstall.sh, uninstall.ps1, README.md, LICENSE -Destination ./release_pkg/
+        Compress-Archive -Path ./release_pkg/* -DestinationPath ./phpvm-universal.zip
+        tar -czvf phpvm-universal.tar.gz -C ./release_pkg pvm pvm.ps1 pvm.cmd install.sh install.ps1 uninstall.sh uninstall.ps1 README.md LICENSE
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          ./pvm-win-x64.zip
-          ./pvm-setup.exe
-          ./pvm-linux-x64.tar.gz
-          ./pvm-linux-arm64.tar.gz
-          ./pvm-osx-x64.tar.gz
-          ./pvm-osx-arm64.tar.gz
+          ./phpvm-universal.zip
+          ./phpvm-universal.tar.gz
+          ./install.sh
+          ./install.ps1
+          ./pvm
+          ./pvm.ps1
+          ./pvm.cmd
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
