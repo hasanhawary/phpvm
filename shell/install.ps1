@@ -32,8 +32,10 @@ Print-Info ("Installing PVM (PHP Version Manager) into {0}..." -f $pvmHome)
 [void][System.IO.Directory]::CreateDirectory($pvmVersions)
 
 $scriptDir = $null
-if ($MyInvocation -and $MyInvocation.MyCommand -and $MyInvocation.MyCommand.Path -and (Test-Path $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue)) {
-    try { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path } catch {}
+if ($MyInvocation -and $MyInvocation.MyCommand -and (-not [string]::IsNullOrWhiteSpace($MyInvocation.MyCommand.Path))) {
+    if (Test-Path -LiteralPath $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue) {
+        try { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path } catch {}
+    }
 }
 $localPs1 = if ($scriptDir) { [System.IO.Path]::Combine($scriptDir, "pvm.ps1") } else { $null }
 $localCmd = if ($scriptDir) { [System.IO.Path]::Combine($scriptDir, "pvm.cmd") } else { $null }
